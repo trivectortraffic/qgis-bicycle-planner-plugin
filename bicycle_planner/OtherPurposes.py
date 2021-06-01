@@ -13,7 +13,7 @@ import time
 import processing
 
 ##### Shortest path function, not designed to stay in this file but I had some struggles
-def Shortest_Path(network_url, points_url, relations_url, origin_id, destination_id, max_d):
+def Shortest_Path(network_url, points_url, relations_url, origin_id, destination_id, name, max_d):
 
     LINEID = 'Distance'
     POINTID1 = 'FromFID'
@@ -27,13 +27,13 @@ def Shortest_Path(network_url, points_url, relations_url, origin_id, destination
 
 # Skapa ett resultatslager (Från Astrids kod)
     crs = network_layer.crs().toWkt()
-    outLayer = QgsVectorLayer('Linestring?crs='+ crs, 'connector_lines' , 'memory')
+    outLayer = QgsVectorLayer('Linestring?crs='+ crs, 'Paths_'+name , 'memory')
     outdp = outLayer.dataProvider()
 
 #add the two point ID field
-    outdp.addAttributes([QgsField(LINEID, QVariant.String),
-                        QgsField(POINTID1, QVariant.String),
-                        QgsField(POINTID2, QVariant.String),
+    outdp.addAttributes([QgsField(LINEID, QVariant.Int),
+                        QgsField(POINTID1, QVariant.Int),
+                        QgsField(POINTID2, QVariant.Int),
                         QgsField(FromToID, QVariant.String)])
     outLayer.updateFields()
 
@@ -60,10 +60,10 @@ def Shortest_Path(network_url, points_url, relations_url, origin_id, destination
 
     for f in access_features:
         points.append(f.geometry().asPoint())
-        ids.append(f[origin_id])
+        ids.append(f['ID'])
     for f in amenities_features:
         points.append(f.geometry().asPoint())
-        ids.append(f[origin_id])
+        ids.append(f['ID'])
 
     print("start graph build", datetime.now())
     tiedPoints = director.makeGraph( builder, points )
@@ -89,6 +89,9 @@ def Shortest_Path(network_url, points_url, relations_url, origin_id, destination
     
         point_id=feature[origin_id]
         near_id=feature[destination_id]
+        
+        point_id = int(point_id)
+        near_id = int(near_id)
     
         from_point = tiedPoints[point_id]
         to_point = tiedPoints[near_id]
@@ -110,22 +113,28 @@ def Shortest_Path(network_url, points_url, relations_url, origin_id, destination
             connector.setGeometry(QgsGeometry.fromPolylineXY(route))
             #print(curPos, type(curPos))
                         
-            res = connector.setAttribute(0,str(costToPoint))
-            res = connector.setAttribute(1,str(feature[origin_id]))
-            res = connector.setAttribute(2,str(feature[destination_id]))
+            res = connector.setAttribute(0,costToPoint)
+            res = connector.setAttribute(1,feature[origin_id])
+            res = connector.setAttribute(2,feature[destination_id])
             res = connector.setAttribute(3,str(feature[origin_id])+ '-' +str(feature[destination_id]))
             res = outdp.addFeatures([connector])
 
         old_point_id=point_id
 
-    QgsProject.instance().addMapLayer(outLayer)
+    Output = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Paths_'+name+'.shp'
+    writer = QgsVectorFileWriter.writeAsVectorFormat(outLayer,Output,"utf-8",layer_poi.crs(),"ESRI Shapefile")
+    iface.addVectorLayer(Output,'','ogr')
 
     print("end", datetime.now())
-##### End of Shortest path function
+    
+##### End of Shortest path function #####
 
-# To test the program, we chose a small test area
+
+
+## To test the program, we chose a small test area ##
 deso = '/Users/laurentcazor/Documents/Trivector work/Data/Befolkning_2013_2018_shp__12f99f76-aa2f-40a9-a23b-06f3f08a10bf_/B1DesoSW_20181231/B1DeSO_SW_region.shp'
 
+### First part: prepare data for the shortest path calculations, run the shortest path algorithm ###
 # 0. Make sure we have single parts
 
 processing.run("native:multiparttosingleparts", {'INPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_poi.shp','OUTPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_poi_s.shp'})
@@ -224,8 +233,11 @@ for i in range (len(purp)):
     relations = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Relations_'+name+'.dbf'
     
 # 5. Run the shortest path algorithm
+    processing.run("native:multiparttosingleparts", {'INPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_'+name+'.shp','OUTPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_s_'+name+'.shp'})
+    points = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_s_'+name+'.shp'
+    Shortest_Path(network, points, relations, 'ID_POINT', 'ID_NEAR', purp_name[i], 30000)
+    
+### Second part: give weights to the shortest paths calculated: see code OtherPurposes_2.py ###
 
-    points = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_'+name+'.shp'
-    Shortest_Path(network, points, relations, 'ID', 'ID', 30000)
 
 
