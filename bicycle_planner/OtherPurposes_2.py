@@ -27,8 +27,8 @@ def sigmoid(b0, b1, b2, b3, X):
 ### Let's go!
 print(datetime.now())
 
-#purp_name = ['Leisure', 'Shopping', 'Services', 'Touring']
-purp_name = ['Leisure']
+purp_name = ['Leisure', 'Shopping', 'Services', 'Touring']
+#purp_name = ['Leisure']
 
 # Dictionnaries for parameters
 gravity_params = {'Leisure': -0.0351, 'Shopping': -0.0833, 'Services': -0.0833, 'Touring': -0.0351}
@@ -37,8 +37,7 @@ mode_params_eb = {'Shopping': [-0.6498748953606043, -0.29797345841414963, -3.360
 
 origins = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/origins.shp'
 
-for i in range (len(purp_name)):
-    name = purp_name[i]
+for name in purp_name:
     gravity = gravity_params[name]
     mode_b = mode_params_b[name]
     mode_eb = mode_params_eb[name]
@@ -46,7 +45,15 @@ for i in range (len(purp_name)):
 # 1. Join origin sizes to shortest path
     
     paths = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Paths_'+name+'.shp'
-    processing.run("native:joinattributestable", {'INPUT':paths,'FIELD':'FromFID','INPUT_2':origins,'FIELD_2':'ID','FIELDS_TO_COPY':['Totalt'],'METHOD':0,'DISCARD_NONMATCHING':False,'PREFIX':'','OUTPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_'+name+'.shp'})
+    processing.run("native:joinattributestable", {'INPUT':paths,
+    'FIELD':'FromFID',
+    'INPUT_2':origins,
+    'FIELD_2':'ID',
+    'FIELDS_TO_COPY':['Totalt'],
+    'METHOD':0,
+    'DISCARD_NONMATCHING':False,
+    'PREFIX':'',
+    'OUTPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_'+name+'.shp'})
     weighted_paths = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_'+name+'.shp'
 
 # 2. Apply distance-decay functions
@@ -70,37 +77,25 @@ for i in range (len(purp_name)):
             f['febike'] = sigmoid(mode_eb[0], mode_eb[1], mode_eb[2], mode_eb[3], X)
 
             work_layer.updateFeature(f)
-    
-    processing.run("qgis:statisticsbycategories", {'INPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_Leisure.shp','VALUES_FIELD_NAME':'exp','CATEGORIES_FIELD_NAME':['FromFID'],'OUTPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Stats_'+name+'.csv'})
-    stats = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Stats_'+name+'.csv'
-    stats_l = pd.read_csv(stats)
-                    
-    stats_l.sort_values(by='FromFID')
-    sum = stats_l['sum']
-    
-    request = qgis.core.QgsFeatureRequest()
-    clause = qgis.core.QgsFeatureRequest.OrderByClause('FromFID', ascending=True)
-    orderby = qgis.core.QgsFeatureRequest.OrderBy([clause])
-    request.setOrderBy(orderby)
-    
-    work_layer.dataProvider().addAttributes([QgsField("Tij",QVariant.Double, "float",8,3)])
-    work_layer.updateFields()
 
-    index = 0
-    fid = 1
-    work_layer.startEditing()
-    for f in work_layer.getFeatures(request):
-        print('FID=',f['FromFID'])
-        exp = f['exp']
-        if (f['FromFID']!=fid):
-            fid = f['FromFID']
-            index += 1
-        sum_exp = sum[index]
-        print(fid, exp/sum_exp)
-        f['Tij'] = exp/sum_exp
-        work_layer.updateFeature(f)
-    work_layer.commitChanges()
-            
+    X = processing.run("native:fieldcalculator", {'INPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_'+name+'.shp',
+    'FIELD_NAME':'Weight_bike',
+    'FIELD_TYPE':0,
+    'FIELD_LENGTH':0,
+    'FIELD_PRECISION':0,
+    'FORMULA':'Totalt*fbike*exp/sum(exp,FromFID)',
+    'OUTPUT':'TEMPORARY_OUTPUT'})
+    
+    processing.run("native:fieldcalculator", {
+    'INPUT': X['OUTPUT'],
+    'FIELD_NAME':'Weight_ebike',
+    'FIELD_TYPE':0,
+    'FIELD_LENGTH':0,
+    'FIELD_PRECISION':0,
+    'FORMULA':'Totalt*febike*exp/sum(exp,FromFID)',
+    'OUTPUT':'/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPathsFinal_'+name+'.shp'})
+    weighted_paths_final = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPathsFinal_'+name+'.shp'
+    iface.addVectorLayer(weighted_paths_final,'','ogr')
 
 print(datetime.now())
 
