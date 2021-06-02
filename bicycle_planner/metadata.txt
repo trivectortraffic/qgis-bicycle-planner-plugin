@@ -1,0 +1,20 @@
+[general]
+name=Bicycle Planner
+version=0.0.1
+repository=https://github.com/trivectortraffic/qgis-bicycle-planner-plugin
+
+author=Laurent Cazor, Joakim Fors
+email=info@trivector.se
+
+description=Tool to help with bicycle infrastructure planning
+about=Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc sollicitudin turpis metus, non maximus enim rutrum placerat. Nulla nec libero diam. Nam commodo lectus suscipit tortor dignissim, quis vestibulum augue fringilla. Quisque sapien tellus, facilisis in nunc tincidunt, hendrerit pharetra libero. Curabitur commodo nulla et justo hendrerit, et porta ipsum interdum. Integer nisi nibh, viverra eu varius vitae, ultrices sed lacus. Donec tincidunt ornare orci non pharetra. Etiam sed scelerisque leo, id lacinia mi. Mauris vel viverra nisl, vel consectetur orci. Maecenas interdum molestie euismod. Integer vel augue ac quam gravida tristique. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eget est ut elit sollicitudin finibus. Aliquam accumsan dolor nec nunc posuere facilisis. Fusce in dictum justo.
+    Sed urna nulla, viverra vitae urna eu, pellentesque feugiat enim. In et sodales nulla. Donec id eleifend velit. In aliquam nibh eget nulla scelerisque fringilla. Nam dui metus, euismod a odio vitae, porttitor iaculis nibh. Aliquam porttitor sagittis orci, et posuere nunc pharetra id. In malesuada vulputate massa quis feugiat. Etiam volutpat ipsum eu justo feugiat sollicitudin. Phasellus faucibus fringilla metus quis molestie. Aliquam sit amet hendrerit nisi. Aenean euismod posuere ex. Vivamus congue dui id nulla scelerisque pellentesque.
+
+qgisMinimumVersion=3.18.0
+
+hasProcessingProvider=True
+
+; extra metdata
+icon=icon.png
+category=Analysis
+tags=planning,bicycle,python
