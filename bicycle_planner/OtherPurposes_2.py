@@ -28,8 +28,8 @@ def sigmoid(b0, b1, b2, b3, X):
 ### Let's go!
 print(datetime.now())
 
-# purp_name = ['Leisure', 'Shopping', 'Services', 'Touring']
-purp_name = ['Leisure']
+purp_name = ['Leisure', 'Shopping', 'Services', 'Touring']
+# purp_name = ['Leisure']
 
 # Dictionnaries for parameters
 gravity_params = {
@@ -93,8 +93,7 @@ mode_params_eb = {
 
 origins = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/origins.shp'
 
-for i in range(len(purp_name)):
-    name = purp_name[i]
+for name in purp_name:
     gravity = gravity_params[name]
     mode_b = mode_params_b[name]
     mode_eb = mode_params_eb[name]
@@ -156,51 +155,41 @@ for i in range(len(purp_name)):
 
             work_layer.updateFeature(f)
 
-    processing.run(
-        "qgis:statisticsbycategories",
+    X = processing.run(
+        "native:fieldcalculator",
         {
-            'INPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_Leisure.shp',
-            'VALUES_FIELD_NAME': 'exp',
-            'CATEGORIES_FIELD_NAME': ['FromFID'],
-            'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Stats_'
+            'INPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPaths_'
             + name
-            + '.csv',
+            + '.shp',
+            'FIELD_NAME': 'Weight_bike',
+            'FIELD_TYPE': 0,
+            'FIELD_LENGTH': 0,
+            'FIELD_PRECISION': 0,
+            'FORMULA': 'Totalt*fbike*exp/sum(exp,FromFID)',
+            'OUTPUT': 'TEMPORARY_OUTPUT',
         },
     )
-    stats = (
-        '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Stats_'
+
+    processing.run(
+        "native:fieldcalculator",
+        {
+            'INPUT': X['OUTPUT'],
+            'FIELD_NAME': 'Weight_ebike',
+            'FIELD_TYPE': 0,
+            'FIELD_LENGTH': 0,
+            'FIELD_PRECISION': 0,
+            'FORMULA': 'Totalt*febike*exp/sum(exp,FromFID)',
+            'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPathsFinal_'
+            + name
+            + '.shp',
+        },
+    )
+    weighted_paths_final = (
+        '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/WeightedPathsFinal_'
         + name
-        + '.csv'
+        + '.shp'
     )
-    stats_l = pd.read_csv(stats)
-
-    stats_l.sort_values(by='FromFID')
-    sum = stats_l['sum']
-
-    request = qgis.core.QgsFeatureRequest()
-    clause = qgis.core.QgsFeatureRequest.OrderByClause('FromFID', ascending=True)
-    orderby = qgis.core.QgsFeatureRequest.OrderBy([clause])
-    request.setOrderBy(orderby)
-
-    work_layer.dataProvider().addAttributes(
-        [QgsField("Tij", QVariant.Double, "float", 8, 3)]
-    )
-    work_layer.updateFields()
-
-    index = 0
-    fid = 1
-    work_layer.startEditing()
-    for f in work_layer.getFeatures(request):
-        print('FID=', f['FromFID'])
-        exp = f['exp']
-        if f['FromFID'] != fid:
-            fid = f['FromFID']
-            index += 1
-        sum_exp = sum[index]
-        print(fid, exp / sum_exp)
-        f['Tij'] = exp / sum_exp
-        work_layer.updateFeature(f)
-    work_layer.commitChanges()
+    iface.addVectorLayer(weighted_paths_final, '', 'ogr')
 
 
 print(datetime.now())
