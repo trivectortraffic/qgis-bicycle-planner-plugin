@@ -1,10 +1,9 @@
 import os.path
 
-from qgis.gui import QgisInterface
 from qgis.core import QgsApplication, QgsMessageLog
-from qgis.PyQt.QtCore import QCoreApplication
+from qgis.gui import QgisInterface
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QToolButton, QMenu
+from qgis.PyQt.QtWidgets import QAction
 
 from .dialog import Dialog
 from .processing import Provider

@@ -1,10 +1,9 @@
-from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (
-    QgsProcessing,
     QgsFeatureSink,
+    QgsProcessing,
     QgsProcessingAlgorithm,
-    QgsProcessingParameterFeatureSource,
     QgsProcessingParameterFeatureSink,
+    QgsProcessingParameterFeatureSource,
 )
 
 
