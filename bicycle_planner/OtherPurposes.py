@@ -3,7 +3,6 @@
 
 # Shortest path algorithm based on Dijkstra's algorithm
 # from Shortest_Path import Shortest_Path
-import time
 from datetime import datetime
 
 from qgis import processing
@@ -98,7 +97,6 @@ def Shortest_Path(
     tiedPoints = director.makeGraph(builder, points)
     graph = builder.graph()
     print("end graph build", datetime.now())
-    time.sleep(3)
 
     a = 0
 
