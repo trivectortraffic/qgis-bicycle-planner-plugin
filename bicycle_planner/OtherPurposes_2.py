@@ -14,10 +14,11 @@ from qgis.core import (
 from PyQt5.QtCore import QVariant
 
 
-### Sigmoid fuction for mode choice ###
-
 
 def sigmoid(b0, b1, b2, b3, X):
+    """
+    Sigmoid fuction for mode choice
+    """
     X = float(X) / 30000
     try:
         S = 1 / (1 + math.exp(-(b0 + b1 * X + b2 * X ** 2 + b3 * math.sqrt(X))))
