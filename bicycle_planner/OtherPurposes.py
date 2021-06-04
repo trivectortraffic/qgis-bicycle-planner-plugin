@@ -6,11 +6,23 @@
 import time
 from datetime import datetime
 
-import processing
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from qgis.core import *
-from qgis.gui import *
+from qgis import processing
+from qgis.analysis import (
+    QgsNetworkDistanceStrategy,
+    QgsVectorLayerDirector,
+    QgsGraphBuilder,
+    QgsGraphAnalyzer,
+)
+from qgis.core import (
+    edit,
+    QgsField,
+    QgsGeometry,
+    QgsVectorLayer,
+    QgsProcessingFeedback,
+    QgsFeature,
+    QgsVectorFileWriter,
+)
+from PyQt5.QtCore import QVariant
 
 
 ##### Shortest path function, not designed to stay in this file but I had some struggles
