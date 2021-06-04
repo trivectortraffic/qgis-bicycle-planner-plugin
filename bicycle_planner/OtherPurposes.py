@@ -64,7 +64,6 @@ def Shortest_Path(
     outLayer.updateFields()
 
     distance = max_d
-    QgsProcessingFeedback()
 
     ## prepare graph
     vl = network_layer
@@ -93,8 +92,16 @@ def Shortest_Path(
         points.append(f.geometry().asPoint())
         ids.append(f['ID'])
 
+    feedback = QgsProcessingFeedback()
+
+    def progress(p):
+        if int(10 * p % 100) == 0:
+            print(f'{int(p):#3d}%')
+
+    feedback.progressChanged.connect(progress)
+
     print("start graph build", datetime.now())
-    tiedPoints = director.makeGraph(builder, points)
+    tiedPoints = director.makeGraph(builder, points, feedback=feedback)
     graph = builder.graph()
     print("end graph build", datetime.now())
 
