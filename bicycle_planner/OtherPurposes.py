@@ -107,6 +107,8 @@ def Shortest_Path(
 
     a = 0
 
+    start = datetime.now()
+    print('Starting cost calculation')
     for feature in relations_layer.getFeatures():
 
         # count percentage done and no features
@@ -153,6 +155,9 @@ def Shortest_Path(
             outdp.addFeatures([connector])
 
         old_point_id = point_id
+
+    elapsed = datetime.now() - start
+    print(f'Finished in {elapsed}')
 
     Output = '/tmp/Paths_' + name + '.shp'
     err, msg = QgsVectorFileWriter.writeAsVectorFormat(
