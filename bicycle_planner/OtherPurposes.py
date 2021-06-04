@@ -395,4 +395,13 @@ def main(iface):
 
 
 if __name__ == '__main__':
-    main()
+
+    class QgisInterface:
+        """
+        Fake QGIS Interface when running from terminal
+        """
+
+        def addVectorLayer(self, *args):
+            return QgsVectorLayer(*args)
+
+    main(QgisInterface())
