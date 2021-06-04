@@ -13,6 +13,7 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
+from .utils import timing
 
 
 def sigmoid(b0, b1, b2, b3, X):
@@ -27,6 +28,7 @@ def sigmoid(b0, b1, b2, b3, X):
     return S
 
 
+@timing
 def main(iface):
     ### Let's go!
     print(datetime.now())

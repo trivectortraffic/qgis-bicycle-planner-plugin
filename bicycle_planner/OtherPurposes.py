@@ -11,8 +11,10 @@ from qgis.core import (
 from PyQt5.QtCore import QVariant
 
 from .ops import shortest_path
+from .utils import timing
 
 
+@timing
 def main(iface):
     ### First part: prepare data for the shortest path calculations, run the shortest path algorithm ###
     # 0. Make sure we have single parts
