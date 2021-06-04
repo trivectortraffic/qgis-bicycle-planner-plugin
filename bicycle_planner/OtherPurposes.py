@@ -27,7 +27,15 @@ from PyQt5.QtCore import QVariant
 
 ##### Shortest path function, not designed to stay in this file but I had some struggles
 def Shortest_Path(
-    network_url, points_url, relations_url, origin_id, destination_id, name, max_d
+    iface,
+    network_url,
+    points_url,
+    relations_url,
+    origin_id,
+    destination_id,
+    name,
+    max_d,
+    out_crs,
 ):
 
     LINEID = 'Distance'
@@ -141,58 +149,49 @@ def Shortest_Path(
 
         old_point_id = point_id
 
-    Output = (
-        '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Paths_'
-        + name
-        + '.shp'
+    Output = '/tmp/Paths_' + name + '.shp'
+    err, msg = QgsVectorFileWriter.writeAsVectorFormat(
+        outLayer, Output, "utf-8", out_crs, "ESRI Shapefile"
     )
-    QgsVectorFileWriter.writeAsVectorFormat(
-        outLayer, Output, "utf-8", layer_poi.crs(), "ESRI Shapefile"
-    )
+    print(err, msg)
     iface.addVectorLayer(Output, '', 'ogr')
 
     print("end", datetime.now())
 
 
 ##### End of Shortest path function #####
-
-
-def main():
-    ## To test the program, we chose a small test area ##
-    deso = '/Users/laurentcazor/Documents/Trivector work/Data/Befolkning_2013_2018_shp__12f99f76-aa2f-40a9-a23b-06f3f08a10bf_/B1DesoSW_20181231/B1DeSO_SW_region.shp'
-
+def main(iface):
     ### First part: prepare data for the shortest path calculations, run the shortest path algorithm ###
     # 0. Make sure we have single parts
-
     processing.run(
         "native:multiparttosingleparts",
         {
-            'INPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_poi.shp',
-            'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_poi_s.shp',
+            'INPUT': '/tmp/small_poi.shp',
+            'OUTPUT': '/tmp/small_poi_s.shp',
         },
     )
     processing.run(
         "native:multiparttosingleparts",
         {
-            'INPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_net.shp',
-            'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_net_s.shp',
+            'INPUT': '/tmp/small_net.shp',
+            'OUTPUT': '/tmp/small_net_s.shp',
         },
     )
-
-    poi = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_poi_s.shp'
-    network = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_net_s.shp'
 
     # 1. Creation of centroids for DeSO
+    # deso = '/Users/laurentcazor/Documents/Trivector work/Data/Befolkning_2013_2018_shp__12f99f76-aa2f-40a9-a23b-06f3f08a10bf_/B1DesoSW_20181231/B1DeSO_SW_region.shp'
+    # processing.run(
+    #    "native:centroids",
+    #    {
+    #        'INPUT': deso,
+    #        'ALL_PARTS': False,
+    #        'OUTPUT': '/tmp/origins.shp',
+    #    },
+    # )
 
-    processing.run(
-        "native:centroids",
-        {
-            'INPUT': deso,
-            'ALL_PARTS': False,
-            'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/origins.shp',
-        },
-    )
-    origins = '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/origins.shp'
+    poi = '/tmp/small_poi_s.shp'
+    network = '/tmp/small_net_s.shp'
+    origins = '/tmp/origins.shp'
 
     # 2. OSM data: separation by purpose
     # Creation of a new attribute
@@ -316,12 +315,8 @@ def main():
         p = purp[i]
         name = purp_name[i]
         layer_poi.selectByIds([k for k in p])
-        dest_p = (
-            '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/small_poi'
-            + name
-            + '.shp'
-        )
-        writer = QgsVectorFileWriter.writeAsVectorFormat(
+        dest_p = '/tmp/small_poi' + name + '.shp'
+        err, msg = QgsVectorFileWriter.writeAsVectorFormat(
             layer_poi,
             dest_p,
             "utf-8",
@@ -329,6 +324,7 @@ def main():
             "ESRI Shapefile",
             onlySelected=True,
         )
+        print(err, msg)
 
         L = iface.addVectorLayer(dest_p, '', 'ogr')
         L.dataProvider().addAttributes([QgsField('ID', QVariant.Int)])
@@ -345,15 +341,11 @@ def main():
                 'INPUT': dest_p,
                 'OVERLAY': origins,
                 'OVERLAY_FIELDS_PREFIX': 'D_',
-                'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_'
-                + name
-                + '.shp',
+                'OUTPUT': '/tmp/OD_' + name + '.shp',
             },
         )
         OD_p = iface.addVectorLayer(
-            '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_'
-            + name
-            + '.shp',
+            '/tmp/OD_' + name + '.shp',
             '',
             'ogr',
         )
@@ -373,36 +365,30 @@ def main():
                 'ID_NEAR': 'ID',
                 'FORMAT': 1,
                 'MAX_DIST': 25000,
-                'DISTANCES': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Relations_'
-                + name
-                + '.dbf',
+                'DISTANCES': '/tmp/Relations_' + name + '.dbf',
             },
         )
-        relations = (
-            '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/Relations_'
-            + name
-            + '.dbf'
-        )
+        relations = '/tmp/Relations_' + name + '.dbf'
 
         # 5. Run the shortest path algorithm
         processing.run(
             "native:multiparttosingleparts",
             {
-                'INPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_'
-                + name
-                + '.shp',
-                'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_s_'
-                + name
-                + '.shp',
+                'INPUT': '/tmp/OD_' + name + '.shp',
+                'OUTPUT': '/tmp/OD_s_' + name + '.shp',
             },
         )
-        points = (
-            '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/OD_s_'
-            + name
-            + '.shp'
-        )
+        points = '/tmp/OD_s_' + name + '.shp'
         Shortest_Path(
-            network, points, relations, 'ID_POINT', 'ID_NEAR', purp_name[i], 30000
+            iface,
+            network,
+            points,
+            relations,
+            'ID_POINT',
+            'ID_NEAR',
+            purp_name[i],
+            30000,
+            layer_poi.crs(),
         )
 
     ### Second part: give weights to the shortest paths calculated: see code OtherPurposes_2.py ###
