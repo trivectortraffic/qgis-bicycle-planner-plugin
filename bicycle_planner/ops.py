@@ -7,85 +7,76 @@ from qgis.analysis import (
     QgsGraphAnalyzer,
 )
 from qgis.core import (
+    edit,
     QgsField,
     QgsGeometry,
     QgsVectorLayer,
     QgsProcessingFeedback,
     QgsFeature,
-    QgsVectorFileWriter,
+    QgsCoordinateReferenceSystem,
 )
 from PyQt5.QtCore import QVariant
 
+from .utils import timing
 
+
+@timing()
 def shortest_path(
-    iface,
-    network_url,
-    points_url,
-    relations_url,
-    origin_id,
-    destination_id,
-    name,
-    max_d,
-    out_crs,
-):
+    network_layer: QgsVectorLayer,
+    points_layer: QgsVectorLayer,
+    relations_data: QgsVectorLayer,
+    origin_field: QgsVectorLayer,
+    destination_field: QgsVectorLayer,
+    max_distance: int,
+    crs: QgsCoordinateReferenceSystem,
+) -> QgsVectorLayer:
     """
     Shortest path algorithm based on Dijkstra's algorithm
+
+    :param network_layer: road network
+    :param points_layer: combined from to points
+    :param relations_data: tabular from to id data
+    :param origin_field: name of from field
+    :param destination_field: name of to field
+    :param max_distance: maximum distance/cost
+    :param crs: output layer crs
     """
 
-    LINEID = 'Distance'
-    POINTID1 = 'FromFID'
-    POINTID2 = 'ToFid'
-    FromToID = 'FromToFID'
+    DISTANCE_FIELD = 'bp_distance'
+    FROM_ID_FIELD = 'bp_from_id'
+    TO_ID_FIELD = 'bp_to_id'
+    FROM_TO_FIELD = 'id'
 
-    access_layer = iface.addVectorLayer(points_url, "Points", "ogr")
-    amenities_layer = iface.addVectorLayer(points_url, "Points", "ogr")
-    network_layer = iface.addVectorLayer(network_url, "Network", "ogr")
-    relations_layer = iface.addVectorLayer(relations_url, "Relations", "ogr")
+    # Create empty output layer
+    output_layer = QgsVectorLayer(f'linestring?crs={crs.toWkt()}', 'Graph', 'memory')
 
-    # Skapa ett resultatslager (Från Astrids kod)
-    crs = network_layer.crs().toWkt()
-    outLayer = QgsVectorLayer('Linestring?crs=' + crs, 'Paths_' + name, 'memory')
-    outdp = outLayer.dataProvider()
-
-    # add the two point ID field
-    outdp.addAttributes(
-        [
-            QgsField(LINEID, QVariant.Int),
-            QgsField(POINTID1, QVariant.Int),
-            QgsField(POINTID2, QVariant.Int),
-            QgsField(FromToID, QVariant.String),
-        ]
-    )
-    outLayer.updateFields()
-
-    distance = max_d
+    # Add attribute fields
+    with edit(output_layer):
+        output_layer.addAttribute(QgsField(DISTANCE_FIELD, QVariant.Double))
+        output_layer.addAttribute(QgsField(FROM_ID_FIELD, QVariant.Int))
+        output_layer.addAttribute(QgsField(TO_ID_FIELD, QVariant.Int))
+        output_layer.addAttribute(QgsField(FROM_TO_FIELD, QVariant.String))
 
     ## prepare graph
-    vl = network_layer
     strategy = QgsNetworkDistanceStrategy()
     director = QgsVectorLayerDirector(
-        vl, -1, '', '', '', QgsVectorLayerDirector.DirectionBoth
+        source=network_layer,
+        directionFieldId=-1,
+        directDirectionValue='',
+        reverseDirectionValue='',
+        bothDirectionValue='',
+        defaultDirection=QgsVectorLayerDirector.DirectionBoth,
     )
     director.addStrategy(strategy)
-    crs = vl.crs()
-    builder = QgsGraphBuilder(network_layer.crs())
+    builder = QgsGraphBuilder(crs)
 
     ## prepare points
-    access_features = access_layer.getFeatures()
-    access_count = access_layer.featureCount()
-    amenities_features = amenities_layer.getFeatures()
-    amenities_count = amenities_layer.featureCount()
-    access_count + amenities_count
-    relations_layer.featureCount()
-    points = []
-    ids = []
-
-    for f in access_features:
-        points.append(f.geometry().asPoint())
-        ids.append(f['ID'])
-    for f in amenities_features:
-        points.append(f.geometry().asPoint())
-        ids.append(f['ID'])
+    data = [
+        (feature['point_id'], feature.geometry().asPoint())
+        for feature in points_layer.getFeatures()
+    ]
+    points = [v[1] for v in data]
+    point_ids = [v[0] for v in data]
 
     feedback = QgsProcessingFeedback()
 
@@ -95,70 +86,58 @@ def shortest_path(
 
     feedback.progressChanged.connect(progress)
 
-    print("start graph build", datetime.now())
-    tiedPoints = director.makeGraph(builder, points, feedback=feedback)
-    graph = builder.graph()
-    print("end graph build", datetime.now())
+    with timing('build network graph'):
+        tied_points = director.makeGraph(builder, points, feedback=feedback)
+        graph = builder.graph()
 
-    a = 0
+    point_id_map = dict(zip(point_ids, tied_points))
 
-    start = datetime.now()
-    print('Starting cost calculation')
-    for feature in relations_layer.getFeatures():
+    n = relations_data.featureCount()
+    prev_point_id = None
+    with timing('calculate connecting routes'), edit(output_layer):
+        for i, feature in enumerate(relations_data.getFeatures()):
+            if prev_point_id is None:
+                prev_point_id = feature[destination_field]
 
-        # count percentage done and no features
-        a = a + 1
+            point_id = int(feature[origin_field])
+            near_id = int(feature[destination_field])
 
-        if a == 1:
-            old_point_id = feature[destination_id]
+            from_point = point_id_map[point_id]
+            to_point = point_id_map[near_id]
+            # TODO: check for NullIsland point (0.0, 0.0) == not found on network
+            from_vertex_id = graph.findVertex(from_point)
+            to_vertex_id = graph.findVertex(to_point)
 
-        # if a/15000==int(a/15000):
-        # print (int((a/relations_count)*100),'%')
+            # New start point => new tree
+            if point_id != prev_point_id:
+                print(f'building dijkstra tree for {point_id}')
+                (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, from_vertex_id, 0)
 
-        point_id = feature[origin_id]
-        near_id = feature[destination_id]
+            if tree[to_vertex_id] != -1 and (
+                cost[to_vertex_id] <= max_distance or max_distance <= 0
+            ):
+                route_cost = cost[to_vertex_id]
+                # print(route_cost)
+                route = [graph.vertex(to_vertex_id).point()]
+                cur_vertex_id = to_vertex_id
+                # Iterate the graph
+                while cur_vertex_id != from_vertex_id:
+                    cur_vertex_id = graph.edge(tree[cur_vertex_id]).fromVertex()
+                    route.append(graph.vertex(cur_vertex_id).point())
+                route.reverse()
 
-        point_id = int(point_id)
-        near_id = int(near_id)
+                connector = QgsFeature(output_layer.fields())
+                connector.setGeometry(QgsGeometry.fromPolylineXY(route))
+                connector[DISTANCE_FIELD] = route_cost
+                connector[FROM_ID_FIELD] = point_id
+                connector[TO_ID_FIELD] = near_id
+                connector[FROM_TO_FIELD] = f'{point_id}-{near_id}'
+                output_layer.addFeature(connector)
 
-        from_point = tiedPoints[point_id]
-        to_point = tiedPoints[near_id]
-        from_id = graph.findVertex(from_point)
-        to_id = graph.findVertex(to_point)
-        if point_id != old_point_id:
-            (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, from_id, 0)
+            prev_point_id = point_id
 
-        if tree[to_id] != -1 and (cost[to_id] <= distance or distance <= 0):
-            costToPoint = cost[to_id]
-            # print(costToPoint)
-            route = [graph.vertex(to_id).point()]
-            curPos = to_id
-            # Iterate the graph
-            while curPos != from_id:
-                curPos = graph.edge(tree[curPos]).fromVertex()
-                route.insert(0, graph.vertex(curPos).point())
-            connector = QgsFeature(outLayer.fields())
-            connector.setGeometry(QgsGeometry.fromPolylineXY(route))
-            # print(curPos, type(curPos))
+            progress(100.0 * i / n)
+            if i > n / 40:
+                break
 
-            connector.setAttribute(0, costToPoint)
-            connector.setAttribute(1, feature[origin_id])
-            connector.setAttribute(2, feature[destination_id])
-            connector.setAttribute(
-                3, str(feature[origin_id]) + '-' + str(feature[destination_id])
-            )
-            outdp.addFeatures([connector])
-
-        old_point_id = point_id
-
-    elapsed = datetime.now() - start
-    print(f'Finished in {elapsed}')
-
-    Output = '/tmp/Paths_' + name + '.shp'
-    err, msg = QgsVectorFileWriter.writeAsVectorFormat(
-        outLayer, Output, "utf-8", out_crs, "ESRI Shapefile"
-    )
-    print(err, msg)
-    iface.addVectorLayer(Output, '', 'ogr')
-
-    print("end", datetime.now())
+    return output_layer

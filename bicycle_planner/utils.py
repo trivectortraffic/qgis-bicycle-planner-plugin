@@ -4,7 +4,18 @@ from typing import Optional
 
 
 from qgis import processing
-from qgis.core import QgsVectorLayer
+from qgis.core import QgsVectorLayer, QgsProcessing
+
+
+def clone_layer(input_layer) -> QgsVectorLayer:
+    input_layer.selectAll()
+    output_layer = processing.run(
+        'qgis:saveselectedfeatures',
+        {'INPUT': input_layer, 'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT},
+    )['OUTPUT']
+    input_layer.removeSelection()
+    output_layer.setName(input_layer.name())
+    return output_layer
 
 
 def ensure_singlepart(input_url: str) -> QgsVectorLayer:
@@ -12,7 +23,7 @@ def ensure_singlepart(input_url: str) -> QgsVectorLayer:
         'native:multiparttosingleparts',
         dict(
             INPUT=input_url,
-            OUTPUT='memory',
+            OUTPUT=QgsProcessing.TEMPORARY_OUTPUT,
         ),
     )['OUTPUT']
 

@@ -1,21 +1,26 @@
-# This code aims to do all the layer pre-processing (i.e. before calculating the shortest paths)
-# Its input are the network, the DeSO (origins) and the OSM POI (destinations)
+"""
+This code aims to do all the layer pre-processing (i.e. before calculating the shortest paths)
+Its input are the network, the DeSO (origins) and the OSM POI (destinations)
+"""
 
 from qgis import processing
 from qgis.core import (
     edit,
     QgsField,
     QgsVectorLayer,
-    QgsVectorFileWriter,
+    QgsProcessing,
+    QgsProject,
+    QgsFeatureRequest,
 )
 from PyQt5.QtCore import QVariant
 
 from .ops import shortest_path
-from .utils import timing
+from .utils import timing, clone_layer, ensure_singlepart
+from .params import poi_class_map, poi_categories
 
 
 @timing()
-def main(iface):
+def main():
     ### First part: prepare data for the shortest path calculations, run the shortest path algorithm ###
     # 0. Make sure we have single parts
     processing.run(
@@ -44,219 +49,127 @@ def main(iface):
     #    },
     # )
 
-    poi = '/tmp/small_poi_s.shp'
-    network = '/tmp/small_net_s.shp'
-    origins = '/tmp/origins.shp'
+    poi_path = '/tmp/small_poi_s.shp'
+    network_path = '/tmp/small_net_s.shp'
+    origins_path = '/tmp/origins.shp'
+
+    point_id = 9000
 
     # 2. OSM data: separation by purpose
     # Creation of a new attribute
 
-    leisure = [
-        'attraction',
-        'cinema',
-        'community_centre',
-        'dog_park',
-        'garden_centre',
-        'golf_course',
-        'museum',
-        'park',
-        'picnic_site',
-        'pitch',
-        'playground',
-        'sports_centre',
-        'theatre',
-        'track',
-    ]
-    shopping = [
-        'bicycle_shop',
-        'clothes',
-        'gift_shop',
-        'mobile_phone_shop',
-        'outdoor_shop',
-        'supermarket',
-        'toy_shop',
-        'video_shop',
-    ]
-    services = [
-        'atm',
-        'bank',
-        'bakery',
-        'cafe',
-        'car_dealership',
-        'car_wash',
-        'car_rental',
-        'dentist',
-        'fast_food',
-        'hairdresser',
-        'kindergarten',
-        'kiosk',
-        'laundry',
-        'library',
-        'pharmacy',
-        'police',
-        'post_box',
-        'post_office',
-        'pub',
-        'recycling',
-        'recycling_paper',
-        'restaurant',
-        'school',
-        'toilet',
-        'town_hall',
-        'veterinary',
-    ]
-    touring = [
-        'artwork',
-        'chalet',
-        'castle',
-        'camp_site',
-        'fountain',
-        'hostel',
-        'hotel',
-        'ruins',
-        'tourist_info',
-        'tower',
-        'viewpoint',
-    ]
+    network_layer = clone_layer(QgsVectorLayer(network_path, 'Road network'))
 
-    layer_poi = iface.addVectorLayer(poi, '', 'ogr')
-    layer_p = layer_poi.dataProvider()
-    layer_p.addAttributes([QgsField('Purpose', QVariant.String)])
-    layer_poi.updateFields()
+    poi_layer = clone_layer(QgsVectorLayer(poi_path, 'Points of Interest'))
+    print(poi_layer)
+    with edit(poi_layer):
+        if not poi_layer.addAttribute(QgsField('category', QVariant.String)):
+            raise Exception('Failed to add layer attribute')
+        if not poi_layer.addAttribute(QgsField('point_id', QVariant.Int)):
+            raise Exception('Failed to add layer attribute')
 
-    id_leis = []
-    id_shop = []
-    id_serv = []
-    id_tour = []
+    poi_ids = {v: [] for v in poi_categories}
+    poi_ids['unknown'] = []
 
-    with edit(layer_poi):
-        for f in layer_poi.getFeatures():
-            if f["fclass"] in leisure:
-                f['Purpose'] = 'Leisure'
-                id_leis.append(f.id())
-            elif f["fclass"] in shopping:
-                f['Purpose'] = 'Shopping'
-                id_shop.append(f.id())
-            elif f["fclass"] in services:
-                f['Purpose'] = 'Services'
-                id_serv.append(f.id())
-            elif f["fclass"] in touring:
-                f['Purpose'] = 'Touring'
-                id_tour.append(f.id())
-            layer_poi.updateFeature(f)
+    print(poi_layer)
+    print(poi_ids)
+
+    with edit(poi_layer):
+        for feature in poi_layer.getFeatures():
+            category = poi_class_map.get(feature['fclass'], 'unknown')
+            feature['category'] = category
+            feature['point_id'] = point_id
+            poi_ids[category].append(feature.id())
+            poi_layer.updateFeature(feature)
+
+            point_id += 1
 
     # 3. Creation of the point layers with a unique ID
 
     # 3.1 Unique ID for DeSO
 
-    layer_origins = iface.addVectorLayer(origins, '', 'ogr')
-    layer_origins.dataProvider().addAttributes([QgsField('ID', QVariant.Int)])
-    layer_origins.updateFields()
+    origin_layer = clone_layer(QgsVectorLayer(origins_path, 'DESO centroids'))
+    with edit(origin_layer):
+        if not origin_layer.addAttribute(QgsField('point_id', QVariant.Int)):
+            raise Exception('Failed to add layer attribute')
 
-    with edit(layer_origins):
-        for f in layer_origins.getFeatures():
-            f['ID'] = 1 + f.id()
-            layer_origins.updateFeature(f)
+    with edit(origin_layer):
+        for feature in origin_layer.getFeatures():
+            feature['point_id'] = point_id
+            origin_layer.updateFeature(feature)
 
-    X = layer_origins.featureCount()
+            point_id += 1
 
     # 3.2 Creation of Unique ID for all the destinations
 
-    purp = [id_leis, id_shop, id_serv, id_tour]
-    purp_name = ['Leisure', 'Shopping', 'Services', 'Touring']
+    # QgsProject.instance().addMapLayer(network_layer)
+    # QgsProject.instance().addMapLayer(origin_layer)
+    # QgsProject.instance().addMapLayer(poi_layer)
 
-    # Sub layer for each purpose
-    for i in range(len(purp)):
-        p = purp[i]
-        name = purp_name[i]
-        layer_poi.selectByIds([k for k in p])
-        dest_p = '/tmp/small_poi' + name + '.shp'
-        err, msg = QgsVectorFileWriter.writeAsVectorFormat(
-            layer_poi,
-            dest_p,
-            "utf-8",
-            layer_poi.crs(),
-            "ESRI Shapefile",
-            onlySelected=True,
-        )
-        print(err, msg)
-
-        L = iface.addVectorLayer(dest_p, '', 'ogr')
-        L.dataProvider().addAttributes([QgsField('ID', QVariant.Int)])
-        L.updateFields()
-        with edit(L):
-            for f in L.getFeatures():
-                f['ID'] = 1 + X + f.id()
-                L.updateFeature(f)
+    # Sub layer for each category
+    for category, ids in poi_ids.items():
+        cat_poi_layer = poi_layer.materialize(QgsFeatureRequest().setFilterFids(ids))
+        cat_poi_layer.setName(f'PoI for {category}')
 
         # 3.3 Merge layers
-        processing.run(
+        od_layer = processing.run(
             "native:union",
             {
-                'INPUT': dest_p,
-                'OVERLAY': origins,
+                'INPUT': cat_poi_layer,
+                'OVERLAY': origin_layer,
                 'OVERLAY_FIELDS_PREFIX': 'D_',
-                'OUTPUT': '/tmp/OD_' + name + '.shp',
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
             },
-        )
-        OD_p = iface.addVectorLayer(
-            '/tmp/OD_' + name + '.shp',
-            '',
-            'ogr',
-        )
-        with edit(OD_p):
-            for f in OD_p.getFeatures():
-                f['ID'] = max(f['ID'], f['D_ID'])
-                OD_p.updateFeature(f)
+        )['OUTPUT']
+        od_layer.setName(f'Combined PoI and DESO for {category}')
+        print(od_layer)
+        with edit(od_layer):
+            for feature in od_layer.getFeatures():
+                feature['point_id'] = feature['point_id'] or feature['D_point_id']
+                od_layer.updateFeature(feature)
 
         # 4. Creation of a relation layer: origins and destinations which are not too far
 
-        processing.run(
-            "saga:pointdistances",
-            {
-                'POINTS': origins,
-                'ID_POINTS': 'ID',
-                'NEAR': dest_p,
-                'ID_NEAR': 'ID',
-                'FORMAT': 1,
-                'MAX_DIST': 25000,
-                'DISTANCES': '/tmp/Relations_' + name + '.dbf',
-            },
+        relations_data = QgsVectorLayer(
+            processing.run(
+                "saga:pointdistances",
+                {
+                    'POINTS': origin_layer,
+                    'ID_POINTS': 'point_id',
+                    'NEAR': cat_poi_layer,
+                    'ID_NEAR': 'point_id',
+                    'FORMAT': 1,
+                    'MAX_DIST': 25000,
+                    'DISTANCES': QgsProcessing.TEMPORARY_OUTPUT,
+                },
+            )['DISTANCES'],
+            'Relations data',
         )
-        relations = '/tmp/Relations_' + name + '.dbf'
+        print(relations_data)
 
         # 5. Run the shortest path algorithm
-        processing.run(
-            "native:multiparttosingleparts",
-            {
-                'INPUT': '/tmp/OD_' + name + '.shp',
-                'OUTPUT': '/tmp/OD_s_' + name + '.shp',
-            },
-        )
-        points = '/tmp/OD_s_' + name + '.shp'
-        shortest_path(
-            iface,
-            network,
-            points,
-            relations,
+        points_layer = ensure_singlepart(od_layer)
+        points_layer.setName('Points')
+
+        # QgsProject.instance().addMapLayer(cat_poi_layer)
+        # QgsProject.instance().addMapLayer(od_layer)
+        # QgsProject.instance().addMapLayer(points_layer)
+        # QgsProject.instance().addMapLayer(relations_data)
+
+        result_layer = shortest_path(
+            network_layer,
+            points_layer,
+            relations_data,
             'ID_POINT',
             'ID_NEAR',
-            purp_name[i],
             30000,
-            layer_poi.crs(),
+            network_layer.crs(),
         )
+        QgsProject.instance().addMapLayer(result_layer)
+        break
 
     ### Second part: give weights to the shortest paths calculated: see code OtherPurposes_2.py ###
 
 
 if __name__ == '__main__':
-
-    class QgisInterface:
-        """
-        Fake QGIS Interface when running from terminal
-        """
-
-        def addVectorLayer(self, *args):
-            return QgsVectorLayer(*args)
-
-    main(QgisInterface())
+    main()
