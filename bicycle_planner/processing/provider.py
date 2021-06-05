@@ -2,6 +2,7 @@ import os.path
 
 from qgis.core import QgsProcessingProvider
 from qgis.PyQt.QtGui import QIcon
+
 from .algorithm import Algorithm
 
 
@@ -18,7 +19,6 @@ class Provider(QgsProcessingProvider):
         Unloads the provider. Any tear-down steps required by the provider
         should be implemented here.
         """
-        pass
 
     def loadAlgorithms(self):
         """
