@@ -137,7 +137,5 @@ def shortest_path(
             prev_point_id = point_id
 
             progress(100.0 * i / n)
-            if i > n / 40:
-                break
 
     return output_layer

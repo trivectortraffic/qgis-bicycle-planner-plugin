@@ -165,8 +165,8 @@ def main():
             30000,
             network_layer.crs(),
         )
+        result_layer.setName(f'Result graph for {category}')
         QgsProject.instance().addMapLayer(result_layer)
-        break
 
     ### Second part: give weights to the shortest paths calculated: see code OtherPurposes_2.py ###
 
