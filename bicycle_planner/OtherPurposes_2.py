@@ -28,7 +28,7 @@ def sigmoid(b0, b1, b2, b3, X):
     return S
 
 
-@timing
+@timing()
 def main(iface):
     ### Let's go!
     print(datetime.now())

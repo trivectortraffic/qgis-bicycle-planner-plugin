@@ -1,5 +1,7 @@
-from functools import wraps
+from contextlib import ContextDecorator
 from time import time
+from typing import Optional
+
 
 from qgis import processing
 from qgis.core import QgsVectorLayer
@@ -26,14 +28,22 @@ def make_deso_centroids(input_url: str) -> QgsVectorLayer:
     )
 
 
-def timing(func):
-    @wraps(func)
-    def decorate(*args, **kwargs):
-        start = time()
-        result = func(*args, **kwargs)
-        end = time()
-        diff = end - start
-        print(f'{func.__module__}.{func.__name__} took {diff:#3.2f} sec')
-        return result
+class timing(ContextDecorator):
+    def __init__(self, msg: Optional[str] = None):
+        self.msg = msg or 'execution'
+        super().__init__()
 
-    return decorate
+    def __call__(self, *args, **kwargs):
+        func = args[0]
+        self.msg += f' ({func.__module__}.{func.__name__})'
+        return super().__call__(*args, **kwargs)
+
+    def __enter__(self):
+        print(f'Timing {self.msg}...')
+        self.ts = time()
+        return self
+
+    def __exit__(self, *exc):
+        diff = time() - self.ts
+        print(f'{self.msg} took: {diff:#1.2f} sec')
+        return False
