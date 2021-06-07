@@ -93,12 +93,10 @@ def shortest_path(
     point_id_map = dict(zip(point_ids, tied_points))
 
     n = relations_data.featureCount()
-    prev_point_id = None
+    flows = {}
+    prev_point_id = -1
     with timing('calculate connecting routes'), edit(output_layer):
         for i, feature in enumerate(relations_data.getFeatures()):
-            if prev_point_id is None:
-                prev_point_id = feature[destination_field]
-
             point_id = int(feature[origin_field])
             near_id = int(feature[destination_field])
 
