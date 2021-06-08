@@ -14,7 +14,7 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
-from .ops import shortest_path
+from .ops import generate_od_routes
 from .utils import timing, clone_layer, ensure_singlepart
 from .params import (
     poi_class_map,
@@ -162,7 +162,7 @@ def main():
         # QgsProject.instance().addMapLayer(points_layer)
         # QgsProject.instance().addMapLayer(relations_data)
 
-        result_layer = shortest_path(
+        result_layer = generate_od_routes(
             network_layer=network_layer,
             points_layer=points_layer,
             relations_data=relations_data,

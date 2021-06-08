@@ -42,7 +42,7 @@ class SaveFidStrategy(QgsNetworkStrategy):
 
 
 @timing()
-def shortest_path(
+def generate_od_routes(
     network_layer: QgsVectorLayer,
     points_layer: QgsVectorLayer,
     relations_data: QgsVectorLayer,
