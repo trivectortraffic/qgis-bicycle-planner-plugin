@@ -1,4 +1,7 @@
+import math
+
 from datetime import datetime
+from typing import List
 
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
@@ -18,7 +21,7 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
-from .utils import timing
+from .utils import timing, sigmoid
 
 
 class SaveFidStrategy(QgsNetworkStrategy):
@@ -47,6 +50,9 @@ def shortest_path(
     destination_field: QgsVectorLayer,
     max_distance: int,
     crs: QgsCoordinateReferenceSystem,
+    gravity_value: float,
+    bike_params: List[float],
+    ebike_params: List[float],
 ) -> QgsVectorLayer:
     """
     Shortest path algorithm based on Dijkstra's algorithm
@@ -66,6 +72,10 @@ def shortest_path(
     TO_ID_FIELD = 'bp_to_id'
     FROM_TO_FIELD = 'id'
 
+    EXP_FIELD = 'exp'
+    BIKE_P_FIELD = 'fbike'
+    EBIKE_P_FIELD = 'febike'
+
     # Create empty output layer
     output_layer = QgsVectorLayer(f'linestring?crs={crs.toWkt()}', 'Graph', 'memory')
 
@@ -76,6 +86,10 @@ def shortest_path(
         output_layer.addAttribute(QgsField(FROM_ID_FIELD, QVariant.Int))
         output_layer.addAttribute(QgsField(TO_ID_FIELD, QVariant.Int))
         output_layer.addAttribute(QgsField(FROM_TO_FIELD, QVariant.String))
+
+        output_layer.addAttribute(QgsField(EXP_FIELD, QVariant.Double))
+        output_layer.addAttribute(QgsField(BIKE_P_FIELD, QVariant.Double))
+        output_layer.addAttribute(QgsField(EBIKE_P_FIELD, QVariant.Double))
 
     ## prepare graph
     director = QgsVectorLayerDirector(
@@ -134,8 +148,8 @@ def shortest_path(
             if tree[to_vertex_id] != -1 and (
                 cost[to_vertex_id] <= max_distance or max_distance <= 0
             ):
-                route_cost = cost[to_vertex_id]
-                # print(route_cost)
+                route_distance = cost[to_vertex_id]
+                # print(route_distance)
                 route_points = [graph.vertex(to_vertex_id).point()]
                 cur_vertex_id = to_vertex_id
                 route_fids = []
@@ -154,13 +168,24 @@ def shortest_path(
 
                 connector = QgsFeature(output_layer.fields())
                 connector.setGeometry(QgsGeometry.fromPolylineXY(route_points))
-                connector[DISTANCE_FIELD] = route_cost
+                connector[DISTANCE_FIELD] = route_distance
                 connector[NETWORK_ID_FIELD] = ', '.join(
                     map(str, route_fids)
                 )  # FIXME: temporary solution, skip layer creation completely and retunr dict with values
                 connector[FROM_ID_FIELD] = from_point_id
                 connector[TO_ID_FIELD] = to_point_id
                 connector[FROM_TO_FIELD] = f'{from_point_id}-{to_point_id}'
+
+                # Calc
+                # TODO: Move to matrix and vectorize calculation
+                exp = math.exp(gravity_value * route_distance / 1000.0)
+                fbike = sigmoid(*bike_params, route_distance)
+                febike = sigmoid(*ebike_params, route_distance)
+
+                connector[EXP_FIELD] = exp
+                connector[BIKE_P_FIELD] = fbike
+                connector[EBIKE_P_FIELD] = febike
+
                 output_layer.addFeature(connector)
 
             prev_point_id = from_point_id

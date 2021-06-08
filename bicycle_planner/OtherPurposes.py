@@ -16,7 +16,13 @@ from PyQt5.QtCore import QVariant
 
 from .ops import shortest_path
 from .utils import timing, clone_layer, ensure_singlepart
-from .params import poi_class_map, poi_categories
+from .params import (
+    poi_class_map,
+    poi_categories,
+    poi_gravity_values,
+    mode_params_bike,
+    mode_params_ebike,
+)
 
 
 @timing()
@@ -157,13 +163,16 @@ def main():
         # QgsProject.instance().addMapLayer(relations_data)
 
         result_layer = shortest_path(
-            network_layer,
-            points_layer,
-            relations_data,
-            'ID_POINT',
-            'ID_NEAR',
-            30000,
-            network_layer.crs(),
+            network_layer=network_layer,
+            points_layer=points_layer,
+            relations_data=relations_data,
+            origin_field='ID_POINT',
+            destination_field='ID_NEAR',
+            max_distance=30000,
+            crs=network_layer.crs(),
+            gravity_value=poi_gravity_values[category],
+            bike_params=mode_params_bike[category],
+            ebike_params=mode_params_ebike[category],
         )
         result_layer.setName(f'Result graph for {category}')
         QgsProject.instance().addMapLayer(result_layer)
