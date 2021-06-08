@@ -1,6 +1,6 @@
 import math
 
-from datetime import datetime
+from collections import defaultdict
 from typing import List
 
 from qgis import processing
@@ -229,4 +229,25 @@ def generate_od_routes(
             feedback=feedback,
         )['OUTPUT']
 
-    return output_layer
+    with timing('create result network'):
+        net_bike_values = defaultdict(float)
+        net_ebike_values = defaultdict(float)
+
+        for feature in output_layer.getFeatures():
+            for fid in map(int, feature[NETWORK_ID_FIELD].split(',')):
+                net_bike_values[fid] += feature['weight_bike']
+                net_ebike_values[fid] += feature['weight_ebike']
+
+        with edit(network_layer):
+            network_layer.addAttribute(QgsField('bike_value', QVariant.Double))
+            network_layer.addAttribute(QgsField('ebike_value', QVariant.Double))
+
+            network_layer.selectByIds(list(net_bike_values.keys()))
+            for feature in network_layer.selectedFeatures():
+                feature['bike_value'] = net_bike_values[feature.id()]
+                feature['ebike_value'] = net_ebike_values[feature.id()]
+
+                network_layer.updateFeature(feature)
+            network_layer.removeSelection()
+
+    return output_layer, network_layer

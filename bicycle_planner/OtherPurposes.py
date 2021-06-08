@@ -163,7 +163,7 @@ def main():
         # QgsProject.instance().addMapLayer(points_layer)
         # QgsProject.instance().addMapLayer(relations_data)
 
-        result_layer = generate_od_routes(
+        result_layer, result_network = generate_od_routes(
             network_layer=network_layer,
             points_layer=points_layer,
             relations_data=relations_data,
