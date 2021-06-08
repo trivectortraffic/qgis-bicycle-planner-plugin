@@ -3,6 +3,7 @@ import math
 from datetime import datetime
 from typing import List
 
+from qgis import processing
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
     QgsVectorLayerDirector,
@@ -15,6 +16,7 @@ from qgis.core import (
     QgsField,
     QgsGeometry,
     QgsVectorLayer,
+    QgsProcessing,
     QgsProcessingFeedback,
     QgsFeature,
     QgsCoordinateReferenceSystem,
@@ -46,8 +48,9 @@ def generate_od_routes(
     network_layer: QgsVectorLayer,
     points_layer: QgsVectorLayer,
     relations_data: QgsVectorLayer,
-    origin_field: QgsVectorLayer,
-    destination_field: QgsVectorLayer,
+    origin_field: str,
+    destination_field: str,
+    population_field: str,
     max_distance: int,
     crs: QgsCoordinateReferenceSystem,
     gravity_value: float,
@@ -66,15 +69,16 @@ def generate_od_routes(
     :param crs: output layer crs
     """
 
-    DISTANCE_FIELD = 'bp_distance'
+    DISTANCE_FIELD = 'distance'
     NETWORK_ID_FIELD = 'network_fids'
-    FROM_ID_FIELD = 'bp_from_id'
-    TO_ID_FIELD = 'bp_to_id'
+    FROM_ID_FIELD = 'from_point_id'
+    TO_ID_FIELD = 'to_point_id'
     FROM_TO_FIELD = 'id'
 
     EXP_FIELD = 'exp'
     BIKE_P_FIELD = 'fbike'
     EBIKE_P_FIELD = 'febike'
+    POP_FIELD = 'pop'
 
     # Create empty output layer
     output_layer = QgsVectorLayer(f'linestring?crs={crs.toWkt()}', 'Graph', 'memory')
@@ -90,6 +94,7 @@ def generate_od_routes(
         output_layer.addAttribute(QgsField(EXP_FIELD, QVariant.Double))
         output_layer.addAttribute(QgsField(BIKE_P_FIELD, QVariant.Double))
         output_layer.addAttribute(QgsField(EBIKE_P_FIELD, QVariant.Double))
+        output_layer.addAttribute(QgsField(POP_FIELD, QVariant.Int))
 
     ## prepare graph
     director = QgsVectorLayerDirector(
@@ -106,11 +111,12 @@ def generate_od_routes(
 
     ## prepare points
     data = [
-        (feature['point_id'], feature.geometry().asPoint())
+        (feature['point_id'], feature.geometry().asPoint(), feature[population_field])
         for feature in points_layer.getFeatures()
     ]
-    points = [v[1] for v in data]
     point_ids = [v[0] for v in data]
+    points = [v[1] for v in data]
+    population_map = {k: v for k, _, v in data}
 
     feedback = QgsProcessingFeedback()
 
@@ -177,7 +183,7 @@ def generate_od_routes(
                 connector[FROM_TO_FIELD] = f'{from_point_id}-{to_point_id}'
 
                 # Calc
-                # TODO: Move to matrix and vectorize calculation
+                # TODO: Move to matrix and vectorize calculation using numpy
                 exp = math.exp(gravity_value * route_distance / 1000.0)
                 fbike = sigmoid(*bike_params, route_distance)
                 febike = sigmoid(*ebike_params, route_distance)
@@ -185,6 +191,7 @@ def generate_od_routes(
                 connector[EXP_FIELD] = exp
                 connector[BIKE_P_FIELD] = fbike
                 connector[EBIKE_P_FIELD] = febike
+                connector[POP_FIELD] = population_map[from_point_id]
 
                 output_layer.addFeature(connector)
 
@@ -192,5 +199,34 @@ def generate_od_routes(
 
             # progress(100.0 * i / n)
         print()
+
+    with timing('calc weights'):
+        tmp_layer = processing.run(
+            "native:fieldcalculator",
+            {
+                'INPUT': output_layer,
+                'FIELD_NAME': 'weight_bike',
+                'FIELD_TYPE': 0,
+                'FIELD_LENGTH': 0,
+                'FIELD_PRECISION': 0,
+                'FORMULA': f'{POP_FIELD} * {BIKE_P_FIELD} * {EXP_FIELD} / sum({EXP_FIELD}, {FROM_ID_FIELD})',  # 'Totalt*fbike*exp/sum(exp,FromFID)',
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            feedback=feedback,
+        )['OUTPUT']
+
+        output_layer = processing.run(
+            "native:fieldcalculator",
+            {
+                'INPUT': tmp_layer,
+                'FIELD_NAME': 'weight_ebike',
+                'FIELD_TYPE': 0,
+                'FIELD_LENGTH': 0,
+                'FIELD_PRECISION': 0,
+                'FORMULA': f'{POP_FIELD} * {EBIKE_P_FIELD} * {EXP_FIELD} / sum({EXP_FIELD}, {FROM_ID_FIELD})',  # 'Totalt*febike*exp/sum(exp,FromFID)',
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            feedback=feedback,
+        )['OUTPUT']
 
     return output_layer

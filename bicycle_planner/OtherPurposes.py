@@ -168,6 +168,7 @@ def main():
             relations_data=relations_data,
             origin_field='ID_POINT',
             destination_field='ID_NEAR',
+            population_field='D_Totalt',
             max_distance=30000,
             crs=network_layer.crs(),
             gravity_value=poi_gravity_values[category],
