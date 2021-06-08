@@ -136,21 +136,22 @@ def main():
 
         # 4. Creation of a relation layer: origins and destinations which are not too far
 
-        relations_data = QgsVectorLayer(
-            processing.run(
-                "saga:pointdistances",
-                {
-                    'POINTS': origin_layer,
-                    'ID_POINTS': 'point_id',
-                    'NEAR': cat_poi_layer,
-                    'ID_NEAR': 'point_id',
-                    'FORMAT': 1,
-                    'MAX_DIST': 25000,
-                    'DISTANCES': QgsProcessing.TEMPORARY_OUTPUT,
-                },
-            )['DISTANCES'],
-            'Relations data',
-        )
+        with timing('calculate relations'):
+            relations_data = QgsVectorLayer(
+                processing.run(
+                    "saga:pointdistances",
+                    {
+                        'POINTS': origin_layer,
+                        'ID_POINTS': 'point_id',
+                        'NEAR': cat_poi_layer,
+                        'ID_NEAR': 'point_id',
+                        'FORMAT': 1,
+                        'MAX_DIST': 25000,
+                        'DISTANCES': QgsProcessing.TEMPORARY_OUTPUT,
+                    },
+                )['DISTANCES'],
+                'Relations data',
+            )
         print(relations_data)
 
         # 5. Run the shortest path algorithm
