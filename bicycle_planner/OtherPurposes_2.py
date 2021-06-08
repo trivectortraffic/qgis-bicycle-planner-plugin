@@ -13,19 +13,8 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
-from .utils import timing
-
-
-def sigmoid(b0, b1, b2, b3, X):
-    """
-    Sigmoid fuction for mode choice
-    """
-    X = float(X) / 30000
-    try:
-        S = 1 / (1 + math.exp(-(b0 + b1 * X + b2 * X ** 2 + b3 * math.sqrt(X))))
-    except OverflowError:
-        S = 'inf'
-    return S
+from .params import poi_gravity_values, mode_params_bike, mode_params_ebike
+from .utils import timing, sigmoid
 
 
 @timing()
@@ -37,71 +26,13 @@ def main(iface):
     # purp_name = ['Leisure']
 
     # Dictionnaries for parameters
-    gravity_params = {
-        'Leisure': -0.0351,
-        'Shopping': -0.0833,
-        'Services': -0.0833,
-        'Touring': -0.0351,
-    }
-    mode_params_b = {
-        'Shopping': [
-            -0.44391129463248735,
-            0.045421282463330465,
-            -3.904112256228761,
-            0.5687733506577125,
-        ],
-        'Services': [
-            -8.295618349118543,
-            -3.751848767649791,
-            0.3791578463667172,
-            -0.9215795742380404,
-        ],
-        'Touring': [
-            -2.0871942229142797,
-            -1.6994613073684237,
-            -1.940943420795848,
-            0.019770984624589937,
-        ],
-        'Leisure': [
-            1.5641575146847442,
-            -2.4196921105723215,
-            5.526990391189266,
-            -3.331767479111909,
-        ],
-    }
-    mode_params_eb = {
-        'Shopping': [
-            -0.6498748953606043,
-            -0.29797345841414963,
-            -3.3602305317530834,
-            -0.7290932553055972,
-        ],
-        'Services': [
-            -3.1822681067845404,
-            -2.1398819794608994,
-            2.201028708826716,
-            -1.4593795193621433,
-        ],
-        'Touring': [
-            -0.976798293893275,
-            -1.3330152115670482,
-            -2.5280686380753137,
-            -0.019578406245738936,
-        ],
-        'Leisure': [
-            0.04333028543699834,
-            -1.5403262612251727,
-            4.310711954186476,
-            -0.588298193854497,
-        ],
-    }
 
     origins = '/tmp/origins.shp'
 
     for name in purp_name:
-        gravity = gravity_params[name]
-        mode_b = mode_params_b[name]
-        mode_eb = mode_params_eb[name]
+        gravity = poi_gravity_values[name]
+        mode_b = mode_params_bike[name]
+        mode_eb = mode_params_ebike[name]
 
         # 1. Join origin sizes to shortest path
 

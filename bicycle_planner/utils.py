@@ -1,3 +1,5 @@
+import math
+
 from contextlib import ContextDecorator
 from time import time
 from typing import Optional
@@ -37,6 +39,18 @@ def make_deso_centroids(input_url: str) -> QgsVectorLayer:
             'OUTPUT': '/Users/laurentcazor/Documents/Trivector work/Work destination choice/Test_small/origins.shp',
         },
     )
+
+
+def sigmoid(b0, b1, b2, b3, X):
+    """
+    Sigmoid fuction for mode choice
+    """
+    X = float(X) / 30000
+    try:
+        S = 1 / (1 + math.exp(-(b0 + b1 * X + b2 * X ** 2 + b3 * math.sqrt(X))))
+    except OverflowError:
+        S = 'inf'
+    return S
 
 
 class timing(ContextDecorator):
