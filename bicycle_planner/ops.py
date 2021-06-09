@@ -1,6 +1,6 @@
 import math
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from typing import List
 
 from qgis import processing
@@ -23,7 +23,18 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
+from .params import (
+    poi_class_map,
+    poi_categories,
+    poi_gravity_values,
+    mode_params_bike,
+    mode_params_ebike,
+)
 from .utils import timing, sigmoid
+
+Route = namedtuple(
+    'Route', 'origin_fid dest_fid cat distance exp fbike febike net_fids'
+)
 
 
 class SaveFidStrategy(QgsNetworkStrategy):
@@ -49,11 +60,7 @@ def generate_od_routes(
     origin_data: list,
     destination_data: list,
     od_data: list,
-    use_dest_fids: list,
     max_distance: int,
-    gravity_value: float,
-    bike_params: List[float],
-    ebike_params: List[float],
 ) -> QgsVectorLayer:
     """
     Shortest path algorithm based on Dijkstra's algorithm
@@ -83,8 +90,8 @@ def generate_od_routes(
     builder = QgsGraphBuilder(crs)
 
     ## prepare points
-    points = [origin[1] for origin in origin_data] + [
-        dest[1] for dest in destination_data
+    points = [origin.point for origin in origin_data] + [
+        dest.point for dest in destination_data
     ]
 
     feedback = QgsProcessingFeedback()
@@ -100,11 +107,12 @@ def generate_od_routes(
         graph = builder.graph()
 
     origin_map = dict(
-        zip([origin[0] for origin in origin_data], tied_points[: len(origin_data)])
+        zip([origin.fid for origin in origin_data], tied_points[: len(origin_data)])
     )
     dest_map = dict(
-        zip([dest[0] for dest in destination_data], tied_points[len(origin_data) :])
+        zip([dest.fid for dest in destination_data], tied_points[len(origin_data) :])
     )
+    dest_cat = {dest.fid: dest.cat for dest in destination_data}
 
     with timing('calculate connecting routes'):
         routes = []
@@ -117,8 +125,8 @@ def generate_od_routes(
             (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, origin_vertex_id, 0)
 
             for dest_fid in dest_fids:
-                if dest_fid not in use_dest_fids:
-                    # TODO: fix multi category
+                category = dest_cat[dest_fid]
+                if category is None:
                     continue
                 dest_point = dest_map[dest_fid]
                 dest_vertex_id = graph.findVertex(dest_point)
@@ -147,15 +155,20 @@ def generate_od_routes(
 
                     # Calc
                     # TODO: Move to matrix and vectorize calculation using numpy
+                    gravity_value = poi_gravity_values[category]
+                    bike_params = mode_params_bike[category]
+                    ebike_params = mode_params_ebike[category]
+
                     exp = math.exp(gravity_value * route_distance / 1000.0)
                     fbike = sigmoid(*bike_params, route_distance)
                     febike = sigmoid(*ebike_params, route_distance)
 
                     # TODO: use namedtuple or dataclass
                     routes.append(
-                        (
+                        Route(
                             origin_fid,
                             dest_fid,
+                            category,
                             route_distance,
                             exp,
                             fbike,
@@ -166,33 +179,37 @@ def generate_od_routes(
 
         print()
 
-    pop = {k: v for k, _, v in origin_data}
-    exp_sum = defaultdict(float)
-    net_bike_values = defaultdict(float)
-    net_ebike_values = defaultdict(float)
-
     with timing('post process routes'):
+        pop = {origin.fid: origin.pop for origin in origin_data}
+        exp_sums = {cat: defaultdict(float) for cat in poi_categories}
+        bike_values = {cat: defaultdict(float) for cat in poi_categories}
+        ebike_values = {cat: defaultdict(float) for cat in poi_categories}
+
         for route in routes:
-            exp_sum[route[0]] += route[3]
+            exp_sums[route.cat][route.origin_fid] += route.exp
         for route in routes:
-            bike_value = pop[route[0]] * route[4] * route[3] / exp_sum[route[0]]
-            ebike_value = pop[route[0]] * route[5] * route[3] / exp_sum[route[0]]
-            for fid in route[6]:
-                net_bike_values[fid] += bike_value
-                net_ebike_values[fid] += ebike_value
+            exp_sum = exp_sums[route.cat][route.origin_fid]
+            bike_value = pop[route.origin_fid] * route.fbike * route.exp / exp_sum
+            ebike_value = pop[route.origin_fid] * route.febike * route.exp / exp_sum
+            for fid in route.net_fids:
+                bike_values[route.cat][fid] += bike_value
+                ebike_values[route.cat][fid] += ebike_value
 
     output_layer = network_layer.clone()
     with timing('create result network'):
         with edit(output_layer):
-            output_layer.addAttribute(QgsField('bike_value', QVariant.Double))
-            output_layer.addAttribute(QgsField('ebike_value', QVariant.Double))
+            for cat in poi_categories:
+                BIKE_FIELD = f'{cat}_bike_value'
+                EBIKE_FIELD = f'{cat}_ebike_value'
+                output_layer.addAttribute(QgsField(BIKE_FIELD, QVariant.Double))
+                output_layer.addAttribute(QgsField(EBIKE_FIELD, QVariant.Double))
 
-            output_layer.selectByIds(list(net_bike_values.keys()))
-            for feature in output_layer.selectedFeatures():
-                feature['bike_value'] = net_bike_values[feature.id()]
-                feature['ebike_value'] = net_ebike_values[feature.id()]
+                output_layer.selectByIds(list(bike_values[cat].keys()))
+                for feature in output_layer.selectedFeatures():
+                    feature[BIKE_FIELD] = bike_values[cat][feature.id()]
+                    feature[EBIKE_FIELD] = ebike_values[cat][feature.id()]
 
-                output_layer.updateFeature(feature)
-            output_layer.removeSelection()
+                    output_layer.updateFeature(feature)
+                output_layer.removeSelection()
 
     return output_layer

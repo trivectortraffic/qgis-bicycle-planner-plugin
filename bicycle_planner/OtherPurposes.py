@@ -2,6 +2,7 @@
 This code aims to do all the layer pre-processing (i.e. before calculating the shortest paths)
 Its input are the network, the DeSO (origins) and the OSM POI (destinations)
 """
+from collections import namedtuple
 
 from qgis import processing
 from qgis.core import (
@@ -24,6 +25,9 @@ from .params import (
     mode_params_bike,
     mode_params_ebike,
 )
+
+Origin = namedtuple('Origin', 'fid point pop')
+Dest = namedtuple('Dest', 'fid point cat')
 
 
 @timing()
@@ -61,31 +65,19 @@ def main():
     #    },
     # )
 
-    # 2. OSM data: separation by purpose
-    # Creation of a new attribute
-    with edit(poi_layer):
-        if not poi_layer.addAttribute(QgsField('category', QVariant.String)):
-            raise Exception('Failed to add layer attribute')
-
-    poi_ids = {v: [] for v in poi_categories}
-    poi_ids['unknown'] = []
-
-    with edit(poi_layer):
-        for feature in poi_layer.getFeatures():
-            category = poi_class_map.get(feature['fclass'], 'unknown')
-            feature['category'] = category
-            poi_ids[category].append(feature.id())
-            poi_layer.updateFeature(feature)
-
     POPULATION_FIELD = 'Totalt'
     CLASS_FIELD = 'fclass'
     origin_data = [
-        (feature.id(), feature.geometry().asPoint(), feature[POPULATION_FIELD])
+        Origin(feature.id(), feature.geometry().asPoint(), feature[POPULATION_FIELD])
         for feature in origin_layer.getFeatures()
     ]
 
     destination_data = [
-        (feature.id(), feature.geometry().asPoint(), feature['category'])
+        Dest(
+            feature.id(),
+            feature.geometry().asPoint(),
+            poi_class_map.get(feature[CLASS_FIELD]),
+        )
         for feature in poi_layer.getFeatures()
     ]
 
@@ -102,26 +94,20 @@ def main():
             )
 
     # QgsProject.instance().addMapLayer(network_layer)
+    # QgsProject.instance().addMapLayer(network_layer.clone())
     # QgsProject.instance().addMapLayer(origin_layer)
     # QgsProject.instance().addMapLayer(poi_layer)
 
     # Sub layer for each category
-    for category, category_fids in poi_ids.items():
-        result_layer = generate_od_routes(
-            network_layer=network_layer,
-            origin_data=origin_data,
-            destination_data=destination_data,
-            od_data=od_data,
-            use_dest_fids=category_fids,
-            max_distance=30000,
-            gravity_value=poi_gravity_values[category],
-            bike_params=mode_params_bike[category],
-            ebike_params=mode_params_ebike[category],
-        )
-        result_layer.setName(f'Result network for {category}')
-        QgsProject.instance().addMapLayer(result_layer)
-
-    ### Second part: give weights to the shortest paths calculated: see code OtherPurposes_2.py ###
+    result_layer = generate_od_routes(
+        network_layer=network_layer,
+        origin_data=origin_data,
+        destination_data=destination_data,
+        od_data=od_data,
+        max_distance=30000,
+    )
+    result_layer.setName('Result network')
+    QgsProject.instance().addMapLayer(result_layer)
 
 
 if __name__ == '__main__':
