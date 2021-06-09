@@ -27,22 +27,27 @@ from .params import (
 
 @timing()
 def main():
+    poi_path = '/tmp/small_poi.shp'
+    network_path = '/tmp/small_net.shp'
+    origins_path = '/tmp/origins.shp'
+
     ### First part: prepare data for the shortest path calculations, run the shortest path algorithm ###
     # 0. Make sure we have single parts
-    processing.run(
+    poi_layer = processing.run(
         "native:multiparttosingleparts",
         {
-            'INPUT': '/tmp/small_poi.shp',
-            'OUTPUT': '/tmp/small_poi_s.shp',
+            'INPUT': poi_path,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
         },
-    )
-    processing.run(
+    )['OUTPUT']
+    network_layer = processing.run(
         "native:multiparttosingleparts",
         {
-            'INPUT': '/tmp/small_net.shp',
-            'OUTPUT': '/tmp/small_net_s.shp',
+            'INPUT': network_path,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
         },
-    )
+    )['OUTPUT']
+    origin_layer = clone_layer(QgsVectorLayer(origins_path, 'DESO centroids'))
 
     # 1. Creation of centroids for DeSO
     # deso = '/Users/laurentcazor/Documents/Trivector work/Data/Befolkning_2013_2018_shp__12f99f76-aa2f-40a9-a23b-06f3f08a10bf_/B1DesoSW_20181231/B1DeSO_SW_region.shp'
@@ -55,19 +60,10 @@ def main():
     #    },
     # )
 
-    poi_path = '/tmp/small_poi_s.shp'
-    network_path = '/tmp/small_net_s.shp'
-    origins_path = '/tmp/origins.shp'
-
     point_id = 9000
 
     # 2. OSM data: separation by purpose
     # Creation of a new attribute
-
-    network_layer = clone_layer(QgsVectorLayer(network_path, 'Road network'))
-
-    poi_layer = clone_layer(QgsVectorLayer(poi_path, 'Points of Interest'))
-    print(poi_layer)
     with edit(poi_layer):
         if not poi_layer.addAttribute(QgsField('category', QVariant.String)):
             raise Exception('Failed to add layer attribute')
