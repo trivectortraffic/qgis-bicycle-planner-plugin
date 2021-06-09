@@ -1,6 +1,6 @@
 import math
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from typing import List
 
 from qgis import processing
@@ -23,7 +23,18 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
+from .params import (
+    poi_class_map,
+    poi_categories,
+    poi_gravity_values,
+    mode_params_bike,
+    mode_params_ebike,
+)
 from .utils import timing, sigmoid
+
+Route = namedtuple(
+    'Route', 'origin_fid dest_fid cat distance exp fbike febike net_fids'
+)
 
 
 class SaveFidStrategy(QgsNetworkStrategy):
@@ -46,16 +57,10 @@ class SaveFidStrategy(QgsNetworkStrategy):
 @timing()
 def generate_od_routes(
     network_layer: QgsVectorLayer,
-    points_layer: QgsVectorLayer,
-    relations_data: QgsVectorLayer,
-    origin_field: str,
-    destination_field: str,
-    population_field: str,
+    origin_data: list,
+    destination_data: list,
+    od_data: list,
     max_distance: int,
-    crs: QgsCoordinateReferenceSystem,
-    gravity_value: float,
-    bike_params: List[float],
-    ebike_params: List[float],
 ) -> QgsVectorLayer:
     """
     Shortest path algorithm based on Dijkstra's algorithm
@@ -69,32 +74,7 @@ def generate_od_routes(
     :param crs: output layer crs
     """
 
-    DISTANCE_FIELD = 'distance'
-    NETWORK_ID_FIELD = 'network_fids'
-    FROM_ID_FIELD = 'from_point_id'
-    TO_ID_FIELD = 'to_point_id'
-    FROM_TO_FIELD = 'id'
-
-    EXP_FIELD = 'exp'
-    BIKE_P_FIELD = 'fbike'
-    EBIKE_P_FIELD = 'febike'
-    POP_FIELD = 'pop'
-
-    # Create empty output layer
-    output_layer = QgsVectorLayer(f'linestring?crs={crs.toWkt()}', 'Graph', 'memory')
-
-    # Add attribute fields
-    with edit(output_layer):
-        output_layer.addAttribute(QgsField(DISTANCE_FIELD, QVariant.Double))
-        output_layer.addAttribute(QgsField(NETWORK_ID_FIELD, QVariant.String))
-        output_layer.addAttribute(QgsField(FROM_ID_FIELD, QVariant.Int))
-        output_layer.addAttribute(QgsField(TO_ID_FIELD, QVariant.Int))
-        output_layer.addAttribute(QgsField(FROM_TO_FIELD, QVariant.String))
-
-        output_layer.addAttribute(QgsField(EXP_FIELD, QVariant.Double))
-        output_layer.addAttribute(QgsField(BIKE_P_FIELD, QVariant.Double))
-        output_layer.addAttribute(QgsField(EBIKE_P_FIELD, QVariant.Double))
-        output_layer.addAttribute(QgsField(POP_FIELD, QVariant.Int))
+    crs = network_layer.crs()
 
     ## prepare graph
     director = QgsVectorLayerDirector(
@@ -110,13 +90,9 @@ def generate_od_routes(
     builder = QgsGraphBuilder(crs)
 
     ## prepare points
-    data = [
-        (feature['point_id'], feature.geometry().asPoint(), feature[population_field])
-        for feature in points_layer.getFeatures()
+    points = [origin.point for origin in origin_data] + [
+        dest.point for dest in destination_data
     ]
-    point_ids = [v[0] for v in data]
-    points = [v[1] for v in data]
-    population_map = {k: v for k, _, v in data}
 
     feedback = QgsProcessingFeedback()
 
@@ -130,124 +106,110 @@ def generate_od_routes(
         tied_points = director.makeGraph(builder, points, feedback=feedback)
         graph = builder.graph()
 
-    point_id_map = dict(zip(point_ids, tied_points))
+    origin_map = dict(
+        zip([origin.fid for origin in origin_data], tied_points[: len(origin_data)])
+    )
+    dest_map = dict(
+        zip([dest.fid for dest in destination_data], tied_points[len(origin_data) :])
+    )
+    dest_cat = {dest.fid: dest.cat for dest in destination_data}
 
-    n = relations_data.featureCount()
-    prev_point_id = -1
-    with timing('calculate connecting routes'), edit(output_layer):
-        for i, feature in enumerate(relations_data.getFeatures()):
-            from_point_id = int(feature[origin_field])
-            to_point_id = int(feature[destination_field])
-
-            from_point = point_id_map[from_point_id]
-            to_point = point_id_map[to_point_id]
+    with timing('calculate connecting routes'):
+        routes = []
+        for origin_fid, dest_fids in od_data:
+            origin_point = origin_map[origin_fid]
             # TODO: check for NullIsland point (0.0, 0.0) == not found on network
-            from_vertex_id = graph.findVertex(from_point)
-            to_vertex_id = graph.findVertex(to_point)
+            origin_vertex_id = graph.findVertex(origin_point)
 
-            # New start point => new tree
-            if from_point_id != prev_point_id:
-                # print(f'building dijkstra tree for {from_point_id}')
-                print('.', end='')
-                (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, from_vertex_id, 0)
+            print('.', end='')
+            (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, origin_vertex_id, 0)
 
-            if tree[to_vertex_id] != -1 and (
-                cost[to_vertex_id] <= max_distance or max_distance <= 0
-            ):
-                route_distance = cost[to_vertex_id]
-                # print(route_distance)
-                route_points = [graph.vertex(to_vertex_id).point()]
-                cur_vertex_id = to_vertex_id
-                route_fids = []
-                # Iterate the graph
-                while cur_vertex_id != from_vertex_id:
-                    cur_edge = graph.edge(tree[cur_vertex_id])
-                    route_fids.append(cur_edge.cost(1))
-                    cur_vertex_id = cur_edge.fromVertex()
-                    route_points.append(graph.vertex(cur_vertex_id).point())
+            for dest_fid in dest_fids:
+                category = dest_cat[dest_fid]
+                if category is None:
+                    continue
+                dest_point = dest_map[dest_fid]
+                dest_vertex_id = graph.findVertex(dest_point)
+                if tree[dest_vertex_id] != -1 and (
+                    cost[dest_vertex_id] <= max_distance or max_distance <= 0
+                ):
+                    route_distance = cost[dest_vertex_id]
+                    # route_points = [graph.vertex(dest_vertex_id).point()]
+                    cur_vertex_id = dest_vertex_id
+                    route_fids = []
+                    # Iterate the graph
+                    while cur_vertex_id != origin_vertex_id:
+                        cur_edge = graph.edge(tree[cur_vertex_id])
+                        route_fids.append(cur_edge.cost(1))
+                        cur_vertex_id = cur_edge.fromVertex()
+                        # route_points.append(graph.vertex(cur_vertex_id).point())
 
-                # route_points.reverse()
-                route_fids = list(
-                    dict.fromkeys(route_fids)
-                )  # NOTE: requires python >= 3.7 for ordered dict FIXME: add python version check
-                route_fids.reverse()
+                    # route_points.reverse()
+                    # route_geom = QgsGeometry.fromPolylineXY(route_points))
 
-                connector = QgsFeature(output_layer.fields())
-                connector.setGeometry(QgsGeometry.fromPolylineXY(route_points))
-                connector[DISTANCE_FIELD] = route_distance
-                connector[NETWORK_ID_FIELD] = ', '.join(
-                    map(str, route_fids)
-                )  # FIXME: temporary solution, skip layer creation completely and retunr dict with values
-                connector[FROM_ID_FIELD] = from_point_id
-                connector[TO_ID_FIELD] = to_point_id
-                connector[FROM_TO_FIELD] = f'{from_point_id}-{to_point_id}'
+                    # Hack to remove duplicate fids
+                    route_fids = list(
+                        dict.fromkeys(route_fids)
+                    )  # NOTE: requires python >= 3.7 for ordered dict FIXME: add python version check
+                    route_fids.reverse()
 
-                # Calc
-                # TODO: Move to matrix and vectorize calculation using numpy
-                exp = math.exp(gravity_value * route_distance / 1000.0)
-                fbike = sigmoid(*bike_params, route_distance)
-                febike = sigmoid(*ebike_params, route_distance)
+                    # Calc
+                    # TODO: Move to matrix and vectorize calculation using numpy
+                    gravity_value = poi_gravity_values[category]
+                    bike_params = mode_params_bike[category]
+                    ebike_params = mode_params_ebike[category]
 
-                connector[EXP_FIELD] = exp
-                connector[BIKE_P_FIELD] = fbike
-                connector[EBIKE_P_FIELD] = febike
-                connector[POP_FIELD] = population_map[from_point_id]
+                    exp = math.exp(gravity_value * route_distance / 1000.0)
+                    fbike = sigmoid(*bike_params, route_distance)
+                    febike = sigmoid(*ebike_params, route_distance)
 
-                output_layer.addFeature(connector)
+                    # TODO: use namedtuple or dataclass
+                    routes.append(
+                        Route(
+                            origin_fid,
+                            dest_fid,
+                            category,
+                            route_distance,
+                            exp,
+                            fbike,
+                            febike,
+                            route_fids,
+                        )
+                    )
 
-            prev_point_id = from_point_id
-
-            # progress(100.0 * i / n)
         print()
 
-    with timing('calc weights'):
-        tmp_layer = processing.run(
-            "native:fieldcalculator",
-            {
-                'INPUT': output_layer,
-                'FIELD_NAME': 'weight_bike',
-                'FIELD_TYPE': 0,
-                'FIELD_LENGTH': 0,
-                'FIELD_PRECISION': 0,
-                'FORMULA': f'{POP_FIELD} * {BIKE_P_FIELD} * {EXP_FIELD} / sum({EXP_FIELD}, {FROM_ID_FIELD})',  # 'Totalt*fbike*exp/sum(exp,FromFID)',
-                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
-            },
-            feedback=feedback,
-        )['OUTPUT']
+    with timing('post process routes'):
+        pop = {origin.fid: origin.pop for origin in origin_data}
+        exp_sums = {cat: defaultdict(float) for cat in poi_categories}
+        bike_values = {cat: defaultdict(float) for cat in poi_categories}
+        ebike_values = {cat: defaultdict(float) for cat in poi_categories}
 
-        output_layer = processing.run(
-            "native:fieldcalculator",
-            {
-                'INPUT': tmp_layer,
-                'FIELD_NAME': 'weight_ebike',
-                'FIELD_TYPE': 0,
-                'FIELD_LENGTH': 0,
-                'FIELD_PRECISION': 0,
-                'FORMULA': f'{POP_FIELD} * {EBIKE_P_FIELD} * {EXP_FIELD} / sum({EXP_FIELD}, {FROM_ID_FIELD})',  # 'Totalt*febike*exp/sum(exp,FromFID)',
-                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
-            },
-            feedback=feedback,
-        )['OUTPUT']
+        for route in routes:
+            exp_sums[route.cat][route.origin_fid] += route.exp
+        for route in routes:
+            exp_sum = exp_sums[route.cat][route.origin_fid]
+            bike_value = pop[route.origin_fid] * route.fbike * route.exp / exp_sum
+            ebike_value = pop[route.origin_fid] * route.febike * route.exp / exp_sum
+            for fid in route.net_fids:
+                bike_values[route.cat][fid] += bike_value
+                ebike_values[route.cat][fid] += ebike_value
 
+    output_layer = network_layer.clone()
     with timing('create result network'):
-        net_bike_values = defaultdict(float)
-        net_ebike_values = defaultdict(float)
+        with edit(output_layer):
+            for cat in poi_categories:
+                BIKE_FIELD = f'{cat}_bike_value'
+                EBIKE_FIELD = f'{cat}_ebike_value'
+                output_layer.addAttribute(QgsField(BIKE_FIELD, QVariant.Double))
+                output_layer.addAttribute(QgsField(EBIKE_FIELD, QVariant.Double))
 
-        for feature in output_layer.getFeatures():
-            for fid in map(int, feature[NETWORK_ID_FIELD].split(',')):
-                net_bike_values[fid] += feature['weight_bike']
-                net_ebike_values[fid] += feature['weight_ebike']
+                output_layer.selectByIds(list(bike_values[cat].keys()))
+                for feature in output_layer.selectedFeatures():
+                    feature[BIKE_FIELD] = bike_values[cat][feature.id()]
+                    feature[EBIKE_FIELD] = ebike_values[cat][feature.id()]
 
-        with edit(network_layer):
-            network_layer.addAttribute(QgsField('bike_value', QVariant.Double))
-            network_layer.addAttribute(QgsField('ebike_value', QVariant.Double))
+                    output_layer.updateFeature(feature)
+                output_layer.removeSelection()
 
-            network_layer.selectByIds(list(net_bike_values.keys()))
-            for feature in network_layer.selectedFeatures():
-                feature['bike_value'] = net_bike_values[feature.id()]
-                feature['ebike_value'] = net_ebike_values[feature.id()]
-
-                network_layer.updateFeature(feature)
-            network_layer.removeSelection()
-
-    return output_layer, network_layer
+    return output_layer
