@@ -13,7 +13,7 @@ class Provider(QgsProcessingProvider):
         Default constructor.
         """
         print('provider __init__')
-        super().__init__(self)
+        super().__init__()
 
     def unload(self):
         """
