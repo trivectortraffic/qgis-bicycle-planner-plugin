@@ -20,6 +20,7 @@ from qgis.core import (
     QgsProcessingFeedback,
     QgsFeature,
     QgsCoordinateReferenceSystem,
+    QgsSpatialIndex,
 )
 from PyQt5.QtCore import QVariant
 
@@ -32,6 +33,8 @@ from .params import (
 )
 from .utils import timing, sigmoid
 
+Origin = namedtuple('Origin', 'fid point pop')
+Dest = namedtuple('Dest', 'fid point cat')
 Route = namedtuple(
     'Route', 'origin_fid dest_fid cat distance exp fbike febike net_fids'
 )
@@ -52,6 +55,38 @@ class SaveFidStrategy(QgsNetworkStrategy):
         except ValueError:
             # TODO: log trace, make sure to do it in a thread safe way
             return -1
+
+
+@timing()
+def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: str):
+    origins_data = [
+        Origin(feature.id(), feature.geometry().asPoint(), feature[pop_field])
+        for feature in origins_source.getFeatures()
+    ]
+
+    dests_data = [
+        Dest(
+            feature.id(),
+            feature.geometry().asPoint(),
+            poi_class_map.get(feature[class_field]),
+        )
+        for feature in dests_source.getFeatures()
+    ]
+
+    dests_sidx = QgsSpatialIndex(dests_source)
+    od_data = []
+    for feature in origins_source.getFeatures():
+        point = feature.geometry().asPoint()
+        od_data.append(
+            (
+                feature.id(),
+                dests_sidx.nearestNeighbor(
+                    point, neighbors=9001, maxDistance=25000
+                ),  # FIXME: no hardcoded values
+            )
+        )
+
+    return origins_data, dests_data, od_data
 
 
 @timing()

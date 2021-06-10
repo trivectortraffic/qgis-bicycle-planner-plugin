@@ -16,7 +16,7 @@ from qgis.core import (
 )
 from PyQt5.QtCore import QVariant
 
-from .ops import generate_od_routes
+from .ops import prepare_od_data, generate_od_routes
 from .utils import timing, clone_layer, ensure_singlepart
 from .params import (
     poi_class_map,
@@ -25,9 +25,6 @@ from .params import (
     mode_params_bike,
     mode_params_ebike,
 )
-
-Origin = namedtuple('Origin', 'fid point pop')
-Dest = namedtuple('Dest', 'fid point cat')
 
 
 @timing()
@@ -78,36 +75,6 @@ def main():
     )
     result_layer.setName('Result network')
     QgsProject.instance().addMapLayer(result_layer)
-
-
-@timing()
-def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: str):
-    origins_data = [
-        Origin(feature.id(), feature.geometry().asPoint(), feature[pop_field])
-        for feature in origins_source.getFeatures()
-    ]
-
-    dests_data = [
-        Dest(
-            feature.id(),
-            feature.geometry().asPoint(),
-            poi_class_map.get(feature[class_field]),
-        )
-        for feature in dests_source.getFeatures()
-    ]
-
-    dests_sidx = QgsSpatialIndex(dests_source)
-    od_data = []
-    for feature in origins_source.getFeatures():
-        point = feature.geometry().asPoint()
-        od_data.append(
-            (
-                feature.id(),
-                dests_sidx.nearestNeighbor(point, neighbors=9001, maxDistance=25000),
-            )
-        )
-
-    return origins_data, dests_data, od_data
 
 
 if __name__ == '__main__':
