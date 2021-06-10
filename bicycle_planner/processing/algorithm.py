@@ -1,10 +1,18 @@
+from qgis import processing
+
 from qgis.core import (
     QgsFeatureSink,
     QgsProcessing,
     QgsProcessingAlgorithm,
     QgsProcessingParameterFeatureSink,
     QgsProcessingParameterFeatureSource,
+    QgsProcessingParameterField,
+    QgsWkbTypes,
+    QgsProcessingParameterVectorDestination,
+    QgsVectorLayer,
 )
+
+from ..ops import get_fields, generate_od_routes, prepare_od_data
 
 
 class Algorithm(QgsProcessingAlgorithm):
@@ -25,22 +33,63 @@ class Algorithm(QgsProcessingAlgorithm):
     # used when calling the algorithm from another algorithm, or when
     # calling from the QGIS console.
 
+    NETWORK = 'NETWORK'
+    ORIGINS = 'ORIGINS'
+    DESTS = 'DESTINATIONS'
+
+    POP_FIELD = 'POPULATION_FIELD'
+    CLASS_FIELD = 'CLASS_FIELD'
+
     OUTPUT = 'OUTPUT'
-    INPUT = 'INPUT'
 
     def initAlgorithm(self, config):
         """
         Here we define the inputs and output of the algorithm, along
         with some other properties.
         """
-
-        # We add the input vector features source. It can have any kind of
-        # geometry.
         self.addParameter(
             QgsProcessingParameterFeatureSource(
-                self.INPUT,
-                self.tr('Input layer'),
+                self.NETWORK,
+                self.tr('Network layer'),
+                [QgsProcessing.TypeVectorLine],
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.ORIGINS,
+                self.tr('Origins layer'),
                 [QgsProcessing.TypeVectorAnyGeometry],
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.POP_FIELD,
+                self.tr('Population field'),
+                defaultValue='totalt',
+                parentLayerParameterName=self.ORIGINS,
+                optional=False,
+                type=QgsProcessingParameterField.Numeric,
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.DESTS,
+                self.tr('Destinations layer'),
+                [QgsProcessing.TypeVectorAnyGeometry],
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.CLASS_FIELD,
+                self.tr('Destination class field'),
+                defaultValue='fclass',
+                parentLayerParameterName=self.DESTS,
+                optional=False,
+                type=QgsProcessingParameterField.String,
             )
         )
 
@@ -56,42 +105,72 @@ class Algorithm(QgsProcessingAlgorithm):
         Here is where the processing itself takes place.
         """
 
-        # Retrieve the feature source and sink. The 'dest_id' variable is used
+        # Retrieve the feature origins_source and sink. The 'sink_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        source = self.parameterAsSource(parameters, self.INPUT, context)
-        (sink, dest_id) = self.parameterAsSink(
+        network_source = self.parameterAsSource(parameters, self.NETWORK, context)
+        origins_source = self.parameterAsSource(parameters, self.ORIGINS, context)
+        dests_source = self.parameterAsSource(parameters, self.DESTS, context)
+
+        pop_field = self.parameterAsString(parameters, self.POP_FIELD, context)
+        class_field = self.parameterAsString(parameters, self.CLASS_FIELD, context)
+
+        if not network_source.wkbType() & QgsWkbTypes.LineString:
+            result = processing.run(
+                'native:multiparttosingleparts',
+                {
+                    'INPUT': parameters[self.NETWORK],
+                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+                },
+                context=context,
+                feedback=feedback,
+                is_child_algorithm=True,
+            )['OUTPUT']
+            network_source = context.takeResultLayer(result)
+
+        if not dests_source.wkbType() & QgsWkbTypes.LineString:
+            result = processing.run(
+                'native:multiparttosingleparts',
+                {
+                    'INPUT': parameters[self.DESTS],
+                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+                },
+                context=context,
+                feedback=feedback,
+                is_child_algorithm=True,
+            )['OUTPUT']
+            dests_source = context.takeResultLayer(result)
+
+        (sink, sink_id) = self.parameterAsSink(
             parameters,
             self.OUTPUT,
             context,
-            source.fields(),
-            source.wkbType(),
-            source.sourceCrs(),
+            get_fields(),
+            network_source.wkbType(),
+            network_source.sourceCrs(),
         )
 
-        # Compute the number of steps to display within the progress bar and
-        # get features from source
-        total = 100.0 / source.featureCount() if source.featureCount() else 0
-        features = source.getFeatures()
+        origins_data, dests_data, od_data = prepare_od_data(
+            origins_source, dests_source, pop_field, class_field
+        )
 
-        for current, feature in enumerate(features):
-            # Stop the algorithm if cancel button has been clicked
+        features = generate_od_routes(
+            network_layer=network_source,
+            origins_data=origins_data,
+            dests_data=dests_data,
+            od_data=od_data,
+            return_layer=False,
+            feedback=feedback,
+        )
+
+        step = 100.0 / len(features)
+        for i, feature in enumerate(features):
             if feedback.isCanceled():
                 break
-
-            # Add a feature in the sink
             sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            feedback.setProgress(i * step)
 
-            # Update the progress bar
-            feedback.setProgress(int(current * total))
-
-        # Return the results of the algorithm. In this case our only result is
-        # the feature sink which contains the processed features, but some
-        # algorithms may return multiple feature sinks, calculated numeric
-        # statistics, etc. These should all be included in the returned
-        # dictionary, with keys matching the feature corresponding parameter
-        # or output names.
-        return {self.OUTPUT: dest_id}
+        return {self.OUTPUT: sink_id}
 
     def name(self):
         """

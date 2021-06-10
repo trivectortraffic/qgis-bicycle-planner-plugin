@@ -21,6 +21,10 @@ from qgis.core import (
     QgsFeature,
     QgsCoordinateReferenceSystem,
     QgsSpatialIndex,
+    QgsFields,
+    QgsFeatureStore,
+    QgsFeatureSink,
+    QgsWkbTypes,
 )
 from PyQt5.QtCore import QVariant
 
@@ -58,7 +62,13 @@ class SaveFidStrategy(QgsNetworkStrategy):
 
 
 @timing()
-def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: str):
+def prepare_od_data(
+    origins_source,
+    dests_source,
+    pop_field: str,
+    class_field: str,
+    max_distance: int = 25000,
+):
     origins_data = [
         Origin(feature.id(), feature.geometry().asPoint(), feature[pop_field])
         for feature in origins_source.getFeatures()
@@ -81,7 +91,7 @@ def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: s
             (
                 feature.id(),
                 dests_sidx.nearestNeighbor(
-                    point, neighbors=9001, maxDistance=25000
+                    point, neighbors=9001, maxDistance=max_distance
                 ),  # FIXME: no hardcoded values
             )
         )
@@ -95,7 +105,9 @@ def generate_od_routes(
     origins_data: list,
     dests_data: list,
     od_data: list,
-    max_distance: int,
+    max_distance: int = 30000,
+    return_layer: bool = True,
+    feedback: QgsProcessingFeedback = None,
 ) -> QgsVectorLayer:
     """
     Shortest path algorithm based on Dijkstra's algorithm
@@ -109,6 +121,8 @@ def generate_od_routes(
     :param crs: output layer crs
     """
 
+    if not network_layer.wkbType() & QgsWkbTypes.LineString:
+        raise Exception('Network layer must be of type LineString')
     crs = network_layer.crs()
 
     ## prepare graph
@@ -129,13 +143,14 @@ def generate_od_routes(
         dest.point for dest in dests_data
     ]
 
-    feedback = QgsProcessingFeedback()
+    if feedback is None:
+        feedback = QgsProcessingFeedback()
 
-    def progress(p):
-        if int(10 * p % 100) == 0:
-            print(f'{int(p):#3d}%')
+        def progress(p):
+            if int(10 * p % 100) == 0:
+                print(f'{int(p):#3d}%')
 
-    feedback.progressChanged.connect(progress)
+        feedback.progressChanged.connect(progress)
 
     with timing('build network graph'):
         tied_points = director.makeGraph(builder, points, feedback=feedback)
@@ -149,17 +164,21 @@ def generate_od_routes(
     )
     dest_cat = {dest.fid: dest.cat for dest in dests_data}
 
+    step = 100.0 / len(od_data)
     with timing('calculate connecting routes'):
         routes = []
-        for origin_fid, dest_fids in od_data:
+        for i, (origin_fid, dest_fids) in enumerate(od_data):
             origin_point = origin_map[origin_fid]
             # TODO: check for NullIsland point (0.0, 0.0) == not found on network
             origin_vertex_id = graph.findVertex(origin_point)
 
             print('.', end='')
             (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, origin_vertex_id, 0)
+            print(':', end='')
 
             for dest_fid in dest_fids:
+                if feedback.isCanceled():
+                    return
                 category = dest_cat[dest_fid]
                 if category is None:
                     continue
@@ -211,6 +230,7 @@ def generate_od_routes(
                             route_fids,
                         )
                     )
+            feedback.setProgress(i * step)
 
         print()
 
@@ -230,21 +250,47 @@ def generate_od_routes(
                 bike_values[route.cat][fid] += bike_value
                 ebike_values[route.cat][fid] += ebike_value
 
-    output_layer = network_layer.clone()
-    with timing('create result network'):
-        with edit(output_layer):
+    # FIXME: Un-kludge this
+    with timing('create result features'):
+        fields = get_fields()
+
+        segments = []
+        for feature in network_layer.getFeatures():
+            fid = feature.id()
+            segment = QgsFeature(fields)
+            segment.setGeometry(QgsGeometry(feature.geometry()))
+
+            segment['network_fid'] = fid
             for cat in poi_categories:
-                BIKE_FIELD = f'{cat}_bike_value'
-                EBIKE_FIELD = f'{cat}_ebike_value'
-                output_layer.addAttribute(QgsField(BIKE_FIELD, QVariant.Double))
-                output_layer.addAttribute(QgsField(EBIKE_FIELD, QVariant.Double))
+                bike_field = f'{cat}_bike_value'
+                ebike_field = f'{cat}_ebike_value'
 
-                output_layer.selectByIds(list(bike_values[cat].keys()))
-                for feature in output_layer.selectedFeatures():
-                    feature[BIKE_FIELD] = bike_values[cat][feature.id()]
-                    feature[EBIKE_FIELD] = ebike_values[cat][feature.id()]
+                segment[bike_field] = bike_values[cat].get(fid)
+                segment[ebike_field] = ebike_values[cat].get(fid)
 
-                    output_layer.updateFeature(feature)
-                output_layer.removeSelection()
+            segments.append(segment)
+
+    if not return_layer:
+        return segments
+
+    with timing('create result layer'):
+        output_layer = QgsVectorLayer(
+            f'LineString?crs={crs.toWkt()}', 'segments', 'memory'
+        )
+        with edit(output_layer):
+            for field in fields:
+                output_layer.addAttribute(field)
+            output_layer.addFeatures(segments, flags=QgsFeatureSink.FastInsert)
 
     return output_layer
+
+
+def get_fields():
+    fields = QgsFields()
+    fields.append(QgsField('network_fid', QVariant.Int))
+    for cat in poi_categories:
+        bike_field = f'{cat}_bike_value'
+        ebike_field = f'{cat}_ebike_value'
+        fields.append(QgsField(bike_field, QVariant.Double))
+        fields.append(QgsField(ebike_field, QVariant.Double))
+    return fields
