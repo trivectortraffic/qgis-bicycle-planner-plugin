@@ -4,6 +4,7 @@ from qgis.core import QgsProcessingProvider
 from qgis.PyQt.QtGui import QIcon
 
 from .algorithm import Algorithm
+from ..assets import icon
 
 
 class Provider(QgsProcessingProvider):
@@ -51,10 +52,7 @@ class Provider(QgsProcessingProvider):
         Should return a QIcon which is used for your provider inside
         the Processing toolbox.
         """
-        print('provider icon')
-        return QIcon(
-            os.path.join(os.path.split(os.path.dirname(__file__))[0], 'icon.png')
-        )  # QgsProcessingProvider.icon(self)
+        return icon
 
     def longName(self):
         """

@@ -5,6 +5,7 @@ from qgis.gui import QgisInterface
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
+from .assets import icon
 from .dialog import Dialog
 from .processing import Provider
 
@@ -38,7 +39,7 @@ class Plugin:
         self.iface.addPluginToMenu('&Bicyle Planner', self.actionRun)"""
         # create action that will start plugin configuration
         self.action = QAction(
-            QIcon(os.path.join(os.path.dirname(__file__), 'icon.png')),
+            icon,
             "Bicycle Planner",
             self.iface.mainWindow(),
         )
