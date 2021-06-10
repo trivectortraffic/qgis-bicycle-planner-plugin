@@ -101,21 +101,21 @@ class Algorithm(QgsProcessingAlgorithm):
         lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Create Bicycle Planner data'
+        return 'createnetwork'
 
     def displayName(self):
         """
         Returns the translated algorithm name, which should be used for any
         user-visible display of the algorithm name.
         """
-        return self.tr(self.name())
+        return self.tr('Generate bicycle flow network')
 
     def group(self):
         """
         Returns the name of the group this algorithm belongs to. This string
         should be localised.
         """
-        return self.tr(self.groupId())
+        return self.tr('Vector processing')
 
     def groupId(self):
         """
@@ -125,7 +125,7 @@ class Algorithm(QgsProcessingAlgorithm):
         contain lowercase alphanumeric characters only and no spaces or other
         formatting characters.
         """
-        return 'Vector layer algos'
+        return 'vector'
 
     def tr(self, string):
         return string  # QCoreApplication.translate('Processing', string)
