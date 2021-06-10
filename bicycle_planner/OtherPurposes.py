@@ -80,6 +80,7 @@ def main():
     QgsProject.instance().addMapLayer(result_layer)
 
 
+@timing()
 def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: str):
     origins_data = [
         Origin(feature.id(), feature.geometry().asPoint(), feature[pop_field])
