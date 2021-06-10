@@ -71,7 +71,6 @@ def main():
         origins_data=origins_data,
         dests_data=dests_data,
         od_data=od_data,
-        max_distance=30000,
     )
     result_layer.setName('Result network')
     QgsProject.instance().addMapLayer(result_layer)
