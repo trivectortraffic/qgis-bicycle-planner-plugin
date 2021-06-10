@@ -96,17 +96,16 @@ def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: s
         for feature in dests_source.getFeatures()
     ]
 
-    with timing('calc rels using spatial index'):
-        sindex = QgsSpatialIndex(dests_source)
-        od_data = []
-        for feature in origins_source.getFeatures():
-            point = feature.geometry().asPoint()
-            od_data.append(
-                (
-                    feature.id(),
-                    sindex.nearestNeighbor(point, neighbors=9001, maxDistance=25000),
-                )
+    dests_sidx = QgsSpatialIndex(dests_source)
+    od_data = []
+    for feature in origins_source.getFeatures():
+        point = feature.geometry().asPoint()
+        od_data.append(
+            (
+                feature.id(),
+                dests_sidx.nearestNeighbor(point, neighbors=9001, maxDistance=25000),
             )
+        )
 
     return origins_data, dests_data, od_data
 
