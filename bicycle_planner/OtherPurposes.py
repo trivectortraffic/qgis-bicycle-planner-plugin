@@ -65,26 +65,40 @@ def main():
     #    },
     # )
 
-    POPULATION_FIELD = 'Totalt'
-    CLASS_FIELD = 'fclass'
-    origin_data = [
-        Origin(feature.id(), feature.geometry().asPoint(), feature[POPULATION_FIELD])
-        for feature in origin_layer.getFeatures()
+    origins_data, dests_data, od_data = prepare_od_data(
+        origin_layer, poi_layer, 'Totalt', 'fclass'
+    )
+
+    result_layer = generate_od_routes(
+        network_layer=network_layer,
+        origins_data=origins_data,
+        dests_data=dests_data,
+        od_data=od_data,
+        max_distance=30000,
+    )
+    result_layer.setName('Result network')
+    QgsProject.instance().addMapLayer(result_layer)
+
+
+def prepare_od_data(origins_source, dests_source, pop_field: str, class_field: str):
+    origins_data = [
+        Origin(feature.id(), feature.geometry().asPoint(), feature[pop_field])
+        for feature in origins_source.getFeatures()
     ]
 
-    destination_data = [
+    dests_data = [
         Dest(
             feature.id(),
             feature.geometry().asPoint(),
-            poi_class_map.get(feature[CLASS_FIELD]),
+            poi_class_map.get(feature[class_field]),
         )
-        for feature in poi_layer.getFeatures()
+        for feature in dests_source.getFeatures()
     ]
 
     with timing('calc rels using spatial index'):
-        sindex = QgsSpatialIndex(poi_layer)
+        sindex = QgsSpatialIndex(dests_source)
         od_data = []
-        for feature in origin_layer.getFeatures():
+        for feature in origins_source.getFeatures():
             point = feature.geometry().asPoint()
             od_data.append(
                 (
@@ -93,21 +107,7 @@ def main():
                 )
             )
 
-    # QgsProject.instance().addMapLayer(network_layer)
-    # QgsProject.instance().addMapLayer(network_layer.clone())
-    # QgsProject.instance().addMapLayer(origin_layer)
-    # QgsProject.instance().addMapLayer(poi_layer)
-
-    # Sub layer for each category
-    result_layer = generate_od_routes(
-        network_layer=network_layer,
-        origin_data=origin_data,
-        destination_data=destination_data,
-        od_data=od_data,
-        max_distance=30000,
-    )
-    result_layer.setName('Result network')
-    QgsProject.instance().addMapLayer(result_layer)
+    return origins_data, dests_data, od_data
 
 
 if __name__ == '__main__':

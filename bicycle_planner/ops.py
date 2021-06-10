@@ -57,8 +57,8 @@ class SaveFidStrategy(QgsNetworkStrategy):
 @timing()
 def generate_od_routes(
     network_layer: QgsVectorLayer,
-    origin_data: list,
-    destination_data: list,
+    origins_data: list,
+    dests_data: list,
     od_data: list,
     max_distance: int,
 ) -> QgsVectorLayer:
@@ -90,8 +90,8 @@ def generate_od_routes(
     builder = QgsGraphBuilder(crs)
 
     ## prepare points
-    points = [origin.point for origin in origin_data] + [
-        dest.point for dest in destination_data
+    points = [origin.point for origin in origins_data] + [
+        dest.point for dest in dests_data
     ]
 
     feedback = QgsProcessingFeedback()
@@ -107,12 +107,12 @@ def generate_od_routes(
         graph = builder.graph()
 
     origin_map = dict(
-        zip([origin.fid for origin in origin_data], tied_points[: len(origin_data)])
+        zip([origin.fid for origin in origins_data], tied_points[: len(origins_data)])
     )
     dest_map = dict(
-        zip([dest.fid for dest in destination_data], tied_points[len(origin_data) :])
+        zip([dest.fid for dest in dests_data], tied_points[len(origins_data) :])
     )
-    dest_cat = {dest.fid: dest.cat for dest in destination_data}
+    dest_cat = {dest.fid: dest.cat for dest in dests_data}
 
     with timing('calculate connecting routes'):
         routes = []
@@ -180,7 +180,7 @@ def generate_od_routes(
         print()
 
     with timing('post process routes'):
-        pop = {origin.fid: origin.pop for origin in origin_data}
+        pop = {origin.fid: origin.pop for origin in origins_data}
         exp_sums = {cat: defaultdict(float) for cat in poi_categories}
         bike_values = {cat: defaultdict(float) for cat in poi_categories}
         ebike_values = {cat: defaultdict(float) for cat in poi_categories}
