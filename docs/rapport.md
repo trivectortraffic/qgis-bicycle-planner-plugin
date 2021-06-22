@@ -46,13 +46,13 @@ Målet med första steget är att identifiera resor och deras frekvens. Modellen
 - Rekreation
 - Turism
 
-Antalet resor per dag per person är baserat på den nationella resvaneundersökningen utförd 2019. Detta försäkrar att den beräknade mängden cykling överensstämmer med det potentiella dagliga flödet. För varje ärende _p_ definerar vi _T_p_ som antalet resor per individ per dag eller den s.k. resegenereringsfaktorn. Modellen gör antagandet att varje resa generera två enhetr _flöde_ (då varje mål kräver en tur- och en returresa). Undantaget är turismresor då de är mindre sannolika att generera returresor.
+Antalet resor per dag per person är baserat på den nationella resvaneundersökningen utförd 2019. Detta försäkrar att den beräknade mängden cykling överensstämmer med det potentiella dagliga flödet. För varje ärende $p$ definerar vi $T_p$ som antalet resor per individ per dag eller den s.k. resegenereringsfaktorn. Modellen gör antagandet att varje resa generera två enhetr _flöde_ (då varje mål kräver en tur- och en returresa). Undantaget är turismresor då de är mindre sannolika att generera returresor.
 
-Den nationella RVUn skiljer inte på inköp och övriga ärenden samt rekreation och turism. Vi antar därför att fördelningen är 50/50 för inköp/övrigt och 75/25 för rekreation/turism. Tabellen nedan anger värdet för parametern _T_p_ för varje typ.
+Den nationella RVUn skiljer inte på inköp och övriga ärenden samt rekreation och turism. Vi antar därför att fördelningen är 50/50 för inköp/övrigt och 75/25 för rekreation/turism. Tabellen nedan anger värdet för parametern $T_p$ för varje typ.
 
 [table]
 
-Det andra syftet med detta steg är att skapa start- och målpunkter.Vi definerar resegeneratorer och attraktorer för varje ärendetyp med antagandet att varje tur- returresa startar och återgår till en individs hem. Information om var individer bor aggregeras bl.a. på DeSO nivå. Sverige delas in i 5984 demografiska statistikområden vilka representerar mellan 700 och 2700 individer. Indelningen tar hänsyn till geografiska företeelser och begränsas i möjligaste mån av t.ex. vägar, vattendrag, järnväg etc. De är utformade att vara stabila över längre tidsrymder.
+Det andra syftet med detta steg är att skapa start- och målpunkter. Vi definerar resegeneratorer och attraktorer för varje ärendetyp med antagandet att varje tur- returresa startar och återgår till en individs hem. Information om var individer bor aggregeras bl.a. på DeSO nivå. Sverige delas in i 5984 demografiska statistikområden vilka representerar mellan 700 och 2700 individer. Indelningen tar hänsyn till geografiska företeelser och begränsas i möjligaste mån av t.ex. vägar, vattendrag, järnväg etc. De är utformade att vara stabila över längre tidsrymder.
 
 Målpunkter för arbetsplatser och skolor kan hämtas från SCB och då på nivån ruta. En ruta är ett område på 1000 m x 1000 m utanför tätort och 250 m x 250 m i tätort. Arbetsplatsmålpunkter kan delas in i 15 olika kategorier för att göra modellen mer detaljerad.
 
@@ -63,7 +63,7 @@ Målpunkter för arbetsplatser och skolor kan hämtas från SCB och då på niv�
 
 När de potentiella start- och målpumkterna är identifierad är nästa steg att modellera relationerna mellan dem i form av antalet resor mellan varje start- och målpunkt även kallat OD-par. Vi använder oss av en gravitationsmodell som säger att antalet resor mellan ett OD-par är proportionellt mot storleken på startpunkten, målpunkten och en generaliserad kostnadsfunktion mellan dem (vi använder oss av avståndet men även andra parametrar som höjdskilnad, säkerhet etc kan användas).
 
-Matematiskt kan modellen beskrivas som följande: om _i_ är en startpunkt med storleken _O_i_ och _j_ är en målpunkt med storleken _D_j_ där avståndet  är _d_ij_ så är antalet resor mellan _i_ och _j_
+Matematiskt kan modellen beskrivas som följande: om $i$ är en startpunkt med storleken $O_i$ och $j$ är en målpunkt med storleken $D_j$ där avståndet  är $d_{ij}$ så är antalet resor mellan $i$ och $j$
 
 $$
 T_{ij} = A_i O_i D_j f(d_{ij})
@@ -92,6 +92,49 @@ Värdet för $\beta$ anges i tabell 2
 
 ### Steg 3: Färdmedelsuppdelning
 
-En färdmedelsvalsmodell, eller mer generellt en diskret valmodell, beräknar sannolikheten för att ett visst färdmedel ska användas som en funktion av olika parametrar. I det här fallet reslängd. Den aktuella modellen
+En färdmedelsvalsmodell, eller mer generellt en diskret valmodell, beräknar sannolikheten för att ett visst färdmedel ska användas som en funktion av olika parametrar; i det här fallet reslängd. [This given modal split will make competing for the bicycle with any other mode]. Färdmedlesfördelningen är baserad på individers faktiska beteende och beägenhet att välja ett visst färdmedel framom andra. Vi använder därför data från resvaneundersökningar för att beräkna parametrarna till sannolikhetsfunktionen. Vi har använt data från den nederländska resvaneundersökningen (OViN 2017) då RVU Sverige 2019 inte kunnat tillhandahålla tillräckligt detaljerad öppen data. Sannolikheten att en individ väljer cykeln som färdmedel för ett OD-par som funktion av avståndet ges av:
 
+
+$$
+P^{(i,j)}(bike)(d_{ij}) = \frac{
+    1
+}{
+    1 + e^{-(\beta_0 + \beta_1 d_{ij} + \beta_2 d_{ij}^2 + \beta_3 \sqrt{d_{ij}})}
+}
+$$
+
+[tabell]
+
+Ett antagande som görs är att alla har tillgång till en cykel och en elcykel. Detta antagande kan modereras med en koefficient som reflekterar tillgången till cykel och, framför allt, elcykel (som troligtvis ändras snabbt). Koefficienten appliceras på de beräknade flödena för att erhålla en mer representativ fördelning.
+
+
+### Steg 4:
+
+Det sista steget går ut på att beräkna de resulterande flödena genom att summera antalet resor viktat med sannolilikheten att resan sker samt sannolikheten att resan sker med cykel eller elcykel.
+
+Resorna knyts till det underliggande vägnätet (NVDB) genom att utnyttja Dijkstras algortim för att hitta den kortaste vägen mellan start och mål. Det underligganda antagandet är att varje individ väljer den kortaste vägen mellan varje punkt. Antagandet anses hålla givet att vi beräknar den potentiella efterfårgan med hypotesen är lika tillgängligt överallt. Vi återanvänder tdigare notationer och definerar $\alpha_m$ som proprotionen av färdmedel $m$ samt $T_p$ som antalet resor genererade per person och dag för ärende $p$. Flödet för länk $k$ i vägnätet kan då beräknas med följande formel:
+
+$$
+\text{flow}_k = \sum_{
+    p \in ärende
+    m \in \{cykel, elcykel\}
+    (i,j) \in k
+}{
+    T_p \alpha_m T_{ij} P^{(i,j)(m)(d_{ij})}
+}
+
+Formeln kan beskrivas som att flödet över länk $k$ är summan av:
+- alla OD-par som använder $k$
+- alla reseärenden
+
+I den egentliga modellen är andelen resor med cykel respektive elcykel proprotionerligt mot deras marknadandelar vilket i Sverige är runt 80% för cykel och 20% för elcykel. Dvs
+
+$$
+\alpha_{cykel} = 0.8, \alpha_{elcykel} = 0.2
+$$
+
+Dessa värden antas ändra snabbt till elcykelns favör då undersökningar visar att runt 40% av alla svenskar övervägar att anskaffa en elcykel i framtiden.
+
+
+## Inkludera socio-ekonomiska variabler
 
