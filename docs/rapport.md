@@ -116,12 +116,13 @@ Resorna knyts till det underliggande vägnätet (NVDB) genom att utnyttja Dijkst
 
 $$
 \text{flow}_k = \sum_{
-    p \in ärende
-    m \in \{cykel, elcykel\}
+    \substack{p \in ärende}\\
+    \substack{m \in \{cykel, elcykel\}}\\
     (i,j) \in k
 }{
     T_p \alpha_m T_{ij} P^{(i,j)(m)(d_{ij})}
 }
+$$
 
 Formeln kan beskrivas som att flödet över länk $k$ är summan av:
 - alla OD-par som använder $k$
@@ -136,5 +137,84 @@ $$
 Dessa värden antas ändra snabbt till elcykelns favör då undersökningar visar att runt 40% av alla svenskar övervägar att anskaffa en elcykel i framtiden.
 
 
-## Inkludera socio-ekonomiska variabler
+## Inkludera socio-ekonomiska faktorer
+
+Möjligheten att använda socio-ekonomiska faktorer för att förvränga storleken på startpunkten finns inkluderat i modellen. Förvrängningen har en direkt påverkan på det beräknade flödesvärdet för en länk [fig n] och kan således användas för att identifiera vägnätslänkar som kan påverka något rättvisemål. Tre indikatorer har använts för modifiera storleken på startpunkten på DeSO-nivå. Datan som krävs för att beräkna dessa indikatorer kan hämtas från SCB.
+
+De beräknade indexen kommer alltid att medelvärdesnormaliseras med aveseende på det studerade området. Således kommer det totala antalet resor att hållas konstant vilket möjliggör enklare jämförelser.
+
+Om $N$ är numret för DeSO-området och $X = (X_1, \dots, X_N)$ den realiserade variabeln $X$ i varje DeSO-område så kan medelvärdet skrivas som:
+
+$$
+\bar{X} = \frac{1}{N} \sum_{i = 1}^{N}{X_i}
+$$
+
+
+### Socio-ekonomisk status
+
+Den socio-ekonomiska statusen är aggregationen av tre underindikatorer:
+
+- utbildning: andelen gymnasieexamen
+- anställning: sysselsättningsgraden
+- ekonomiskt bistånd: graden av biståndberoende
+
+Enligt tabellen nedan är varje DeSO-område rangordnat enligt dessa indikatorer. Området ges 1 poäng om det återfinns bland de 20% bästa, 3 poäng för 20% sämsta och annars 2 poäng.
+
+[tabell]
+
+Om $S$ är poängen enligt tabellen så kan indexet $s$ beskrivas som:
+
+$$
+s = \frac{S}{\bar{S}}
+
+
+### Hälsostatus
+
+Indikatorn knuten till hälsa beräknas som medeltalet av dagar sjukfrånvaro per invånare i DeSO-området:
+
+$$
+h = \frac{H}{\bar{H}}
+$$
+
+
+
+### Mångfaldsindex
+
+Mångfaldsindex tar i beaktande individer med utländsk bakgrund för vilka tillgången till god cykelinfrastruktur utbildning är viktiga integrationsverktyg. Indexet består av proportionen $P$ utrikes födda och antalet $N$ nationaliteter i DeSO-området Mångfaldsindexet $d$ är åter igen normaliserat.
+
+$$
+d = \frac{
+    P \times N
+}{
+    \bar{P} \times \bar{N}
+}
+$$
+
+### Indexaggreggering
+
+
+De tre indexen kombineras som ett aggregerat medelvärde $a$
+
+$$
+a = \frac{1}{3} (s+h+d)
+$$
+
+De olika indexen används som faktorer av startpunktsstorleken så att varje DeSO-omårde har ett individuellt korrigerade värden för populationen baserat på dimensionerna. Den förvrängda startpunktenstorleken för startpunkt $i$ av population $O_i$ gällande index $x_i \in \{a_i, s_i, h_i, d_i\}$ ges av produkten av denna faktor och populationen
+
+$$
+O_i^x = x_i \times O_i
+$$
+
+där
+
+$s_i$ är det socioekonomiska indexet för startpunkt $i$\
+$h_i$ är hälsoindexet för startpunkt $i$\
+$d_i$ är mångfaldsindexet för startpunkt $i$\
+$a_i$ är det aggregerade indext för startpunkt $i$\
+
+
+## Utvärdera utbudet
+
+### VGU-rekommendationer
+
 
