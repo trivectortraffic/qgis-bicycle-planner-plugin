@@ -142,9 +142,7 @@ Resorna knyts till det underliggande vägnätet (NVDB) genom att utnyttja Dijkst
 
 $$
 \text{flow}_k = \sum_{
-    \substack{p \in ärende}\\
-    \substack{m \in \{cykel, elcykel\}}\\
-    (i,j) \in k
+    p \in ärende, m \in \{cykel, elcykel\}, (i,j) \in k
 }{
     T_p \alpha_m T_{ij} P^{(i,j)(m)(d_{ij})}
 }
