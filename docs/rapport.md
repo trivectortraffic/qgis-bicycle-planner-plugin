@@ -1,3 +1,7 @@
+---
+lang: sv
+---
+
 ## Regional cykelmodell 2.0
 
 Utifrån utfallet av Kågesson-modellen 1.0 och de antaganden som skärskådades redovisas här en ansats till en regional cykelmodell 2.0. Den nya modellen beaktar exempelvis både cykel och elcykel för olika typer av ärenden, alltså inte bara pendling. Den nya modellen beaktar också olika grupper av människor utifrån exempelvis etnicitet, socioekonomi och ohälsa. Det är inte möjligt med tillgängliga data att beakta olika gruppers faktiska resmönster, däremot är det möjligt att beakta olika grupper när det gäller prioritering av infrastruktur. Såsom påpekats påverkas generellt socioekonomiskt svaga grupper mer av dålig infrastruktur. Från ett jämlikhetsperspektiv kan det då vara motiverat att satsa extra på svagare områden.
@@ -352,7 +356,7 @@ De beräkningar och algoritmer som används i QGIS insticksmodulen kan ge en inb
 #### Förprocessering
 
 
-All geografisk indata som används i beräknigarna projiceras om till ett gemensamt meterbaserat koordinatsystem. Standardkoordinatsystem är SWEREF 99 TM (EPSG.3006). Alla geometrier görs även så kallat enkla, dvs varje objekt består av en sammanhållen geometri. DeSO och andra statistikområden gärs om till punktform geonom att beräkna centroiden för varje objekt. Besöksmål importerade från t.ex. OpenStreetMap ärendekategoriseras på basen OSM-objektets klass. Spatiella index byggs därefter för all destinationspunktdata för att effektivisera uppslag i efterföljande beräkningar.
+All geografisk indata som används i beräknigarna projiceras om till ett gemensamt meterbaserat koordinatsystem. Standardkoordinatsystem är SWEREF 99 TM (EPSG:3006). Alla geometrier görs även så kallat enkla, dvs varje objekt består av en sammanhållen geometri. DeSO och andra statistikområden gärs om till punktform geonom att beräkna centroiden för varje objekt. Besöksmål importerade från t.ex. OpenStreetMap ärendekategoriseras på basen OSM-objektets klass. Spatiella index byggs därefter för all destinationspunktdata för att effektivisera uppslag i efterföljande beräkningar.
 
 När all geografiska data är förberedd kan OD-matriser byggas genom att för varje startpunkt göra ett spatiellt uppslag på alla besöksmål inom en 30 km radie.
 
