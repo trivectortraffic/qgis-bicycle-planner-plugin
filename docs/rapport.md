@@ -166,6 +166,7 @@ Om $S$ är poängen enligt tabellen så kan indexet $s$ beskrivas som:
 
 $$
 s = \frac{S}{\bar{S}}
+$$
 
 
 ### Hälsostatus
@@ -217,4 +218,85 @@ $a_i$ är det aggregerade indext för startpunkt $i$\
 
 ### VGU-rekommendationer
 
+Vi har beräknat och vet efterfrågan på cykling för vägnätet. Nästa steg är nu att utvärdera det faktiska utbudet för att identifiera eventuella saknade länkar. Indikatorerna är knutna till cykelbarheten för vägsegmenten och till kraven i VGU över vilken typ av cykelinfrastruktur som ska konstrueras och under vilka förhållanden. Följande tabell har skapats utifrån VGUs krav över var olika typer av cykelinfrastruktur bör byggas.
 
+
+| Hastighetsgräns (km/t) | 30- | 31-40 | 41-60 | 61-80 | 80+   |
+| ---------------------- | --- | ----- | ----- | ----- | ----- |
+| ÅDT                    |     |       |       |       |       |
+| < 1000                 |  1  | 1 / 2 | 2 / 3 |   3   | 4 / 5 |
+| 1000 - 2000            |  1  | 1 / 2 | 2 / 3 |   3   | 4 / 5 |
+| 2000 - 4000            |  1  |   3   |   3   |   3   | 4 / 5 |
+| > 4000                 |  1  |   3   | 4 / 5 | 4 / 5 | 4 / 5 |
+
+Siffrorna överenstämmer
+
+1. cykel i blandtrafik
+2. omfördela vägyta t.ex. skapa cykelfält om vägen inte är tillräckligt bre dför två motorfordon att mötas
+3. målat cykelfält
+4. bygg separerad sommarcykelväg med enklare ytbeläggning om efterfrågan inte är tillräcklig för, eller hänvisa cykelrutten till sidovägar
+5. skapa en separerad cykelväg om det finns tillräckligt med efterfrågan (mer än 50 cyklister i medletal per dag) eller hänvisa till intilliggande väg
+
+Valet mellan alternativ 4 och 5 beror på den potentiella mängden cykeltrafik på vägen eftersom mera sällan trafikerade vägar inte nödvändigtvis berättigar investering i separerad cykelinfrastruktur. Valet mellan alternativ 1 och 2 eller 2 och 3 beror till största delen på vägtypen.
+
+Det finns några undantag till tabellen
+
+- om vägen har 3 eller fler filer (t.ex. 2+1 väg) så måste alternativ 4 eller 5 väljas oberoende av hastighetsgräns eller ÅDT
+- om det redan finns cykelinfrastruktur så blir valet 1 (dvs, ingen förbättring krävs)
+
+
+## Nivå av trafikstress
+
+Dessa tabeller fungerar som ett annat mått på cykelbarhet. Nivån av trafikstress graderas på en skala från 1 till 4 där 1 betyder att vem som helst kan cykla den sträckan medan 4 anger att sträckan inte är säker för någon. Dessa mått beror på infrastrukturen och skiljer sig om det finns separerad cykelinfrastruktur eller inte. Stressnivån är 4 för alla vägar med mer än 3 körbanor.
+
+| Hastighetsgräns (km/t) | 30- | 31-40 | 41-60 | 61-80 | 80+   |
+| ---------------------- | --- | ----- | ----- | ----- | ----- |
+| ÅDT                    |     |       |       |       |       |
+| < 1000                 |  1  |   1   |   2   |   2   |   4   |
+| 1000 - 2000            |  1  |   2   |   2   |   3   |   4   |
+| 2000 - 4000            |  1  |   2   |   3   |   3   |   4   |
+| > 4000                 |  1  |   3   |   4   |   4   |   4   |
+
+
+| Hastighetsgräns (km/t) | 30- | 31-40 | 41-60 | 61-80 | 80+   |
+| ---------------------- | --- | ----- | ----- | ----- | ----- |
+| ÅDT                    |     |       |       |       |       |
+| < 1000                 |  1  |   1   |   1   |   1   |   4   |
+| 1000 - 2000            |  1  |   1   |   1   |   2   |   4   |
+| 2000 - 4000            |  1  |   1   |   2   |   2   |   4   |
+| > 4000                 |  1  |   2   |   3   |   3   |   4   |
+
+
+## Prioritering
+
+För varje länk i vägnätet har efterfrågan, socio-ekonomiskt förvrängd efterfrågan och det faktiska behovet beräknats. För att identifiera luckor eller förvättringsbehov använder vi två mätvärden.
+
+
+### Rangording av förbättringsbehov per typ
+
+Det är nu möjligt att rangordna de olika typerna förbättringar som krävs utifrån de olika beräknade flödena. Således är en ett mått på prioritering att välja ett visst antal km vägnät i behov av förbättring utav följand infrastrukturtyper:
+
+1. hastighetsdämpande/omfördelning
+2. cykelfält
+3. separerad cykelväg
+4. sommarcykelväg
+
+### Övergripande rangordning inom område
+
+Ett annat typ av mått har utvecklats för att ha en mer övergripande prioritering. Tillgång och efterfrågan jämförs direkt på basen av LTS kriterierna från tabell 1 och 2. Vi designar förhållandet mellan tillgång och efterfrågan så att:
+
+$$
+R = flow \times \log_2 (LTS)
+$$
+
+Detta mått har ingen motsvarighet i litteraturen. Dess utforming motiveras med att den ger ett större flöde när värdet på LTS är stort.
+
+- när $LTS = 1:  R = 0$ för alla flöden. Infrastrukturen är lämplig för cykling och ingen förbättring krävs
+- när $LTS = 2: R = flow$
+- när $LTS = 3: R = 1.58 \times flow$
+- när $LTS = 4: R = 2 \times flow$
+
+Högre prioritet ges då åt vägsträckor som har högre värden för LTS och höga flödesvärden.
+
+
+## Implementering i QGIS/Python
