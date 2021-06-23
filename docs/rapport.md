@@ -4,9 +4,24 @@ Utifrån utfallet av Kågesson-modellen 1.0 och de antaganden som skärskådades
 
 En utmaning är att göra välavvägda antaganden om hur länge och hur långt människor är villiga att cykla i relation till olika ärenden. Den här typen av information går inte att hämta från den svenska resvaneundersökningen. Istället har den nederländska resvaneundersökningen använts, se Figur   4 -23 och Figur   4 -24. Fördelen är dels att den nederländska resvaneundersökningen redovisar resmönster med både cykel och elcykel för olika typer av ärenden, dels att den nederländska cykelinfrastrukturen kan ses som en målbild.
 
-.
-.
-.
+
+![Sannolikhet att cykel används för olika ärenden och avstånd](bike-decay-graph.png)
+
+![Sannolikhet att elcykel används för olika ärenden och avstånd](ebike-decay-graph.png)
+
+
+Modellen som presenteras här är en ansenlig uppdatering av Kågesson som utvecklades för Trafikverket 2007. Målet med modellen är att den ska användas som ett verktyg för att identifiera de platser där cykelinfrastruktur fattas eller behöver förbättras när kommunala, regionala och nationella cykelplaner tas fram. Modellen har två huvudanvändingsområden:
+
+1. Uppskatta den potentiella efterfrågan på cykelinfrastruktur uppdelat på ärendetyp och där resultatet kan viktas med avseende på hälso-, mångfalds och socio-ekonomiska aspekter
+2. Utvärdera det faktiska utbudet baserat på krav i VGU och vägegenskaper (ÅDT, hastighetsgränser, antal körfält)
+
+Utifrån ovanstående beräkningar har mått tagits fram för att prioritera investeringar i cykelinfrastruktur på basen av förhållandet mellan tillgång och efterfrågan.
+
+Modellen har implementerats i Python och beräkningar samt kartor har gjorts i GIS-mjukvaran [QGIS](https://qgis.org/en/site/). För att automatiser aoch tillgängliggöra modellen så har den implementerats som en insticksmodul till QGIS vilket möjliggör beräkning och visualisering av ett godtyckligt område.
+
+Detta avsnitt kommer att presentera flera aspekter av modelleringen: den teoretiska modellen och de antaganden som görs, datakällor som använts, beräkningssteg i QGIS-insticksmodulen samt beskrivning hur den kan användas.
+
+
 
 ### Modellen
 
@@ -17,7 +32,7 @@ Modellen är resultatet av ett examensarbete utfört av Laurent Cazor vid KTH. H
 
 Modellen är består av ett antal undermodeller för att beräkna behovet. Uppdelningen är både baserad på typen av ärende (pendlign till arbete, skolresor, turism, inköp och rekreation) och typ av cykel (vanlig cykel och elcykel). Orsaken till uppdelning baserat på cykeltyp beror på skillnaden i distans en person på vardera cykeltyp normalt färdas. De olika ärendena är baserade på den nationella resvaneundersökningen.
 
-[fig]
+![Uppdelning av modellen i undermodeller](sub-models.png)
 
 Den modell som används för att uppskatta det potentiella behovet kallas fyrstegsmodellen. Denna modell är vedertagen i transportplaneringssammanhang och består av 4 nedan beskrivna steg där indata i det första steget är demografiska värden samt start- och målpositioner. Varje steg i modellen använder sig av resultetat från det föregående.
 
@@ -29,10 +44,10 @@ Den modell som används för att uppskatta det potentiella behovet kallas fyrste
 
 4. Summering: Antalet resor kan kan i det här steget beräknas genom att summera sannolikheten för varje OD-par per nätverkssegment. Summan representera det uppskattade dagliga flödet för varje del av vägnätverket.
 
-Figure 2 visar ett flödesschema över varje steg beskrivet ovan.
+Figuren nedan visar ett flödesschema över varje steg beskrivet ovan.
 
 
-[fig]
+![Modellsteg](model-steps.svg)
 
 
 ### Steg 1: Resegenerering
@@ -50,7 +65,14 @@ Antalet resor per dag per person är baserat på den nationella resvaneundersök
 
 Den nationella RVUn skiljer inte på inköp och övriga ärenden samt rekreation och turism. Vi antar därför att fördelningen är 50/50 för inköp/övrigt och 75/25 för rekreation/turism. Tabellen nedan anger värdet för parametern $T_p$ för varje typ.
 
-[table]
+| Ärende | $T_p$ |
+| ------ | ---- |
+| Pendling | 1.52 |
+| Inköp | 0.18 |
+| Service | 0.18 |
+| Rekreation | 0.4 |
+| Turism | 0.07 |
+
 
 Det andra syftet med detta steg är att skapa start- och målpunkter. Vi definerar resegeneratorer och attraktorer för varje ärendetyp med antagandet att varje tur- returresa startar och återgår till en individs hem. Information om var individer bor aggregeras bl.a. på DeSO nivå. Sverige delas in i 5984 demografiska statistikområden vilka representerar mellan 700 och 2700 individer. Indelningen tar hänsyn till geografiska företeelser och begränsas i möjligaste mån av t.ex. vägar, vattendrag, järnväg etc. De är utformade att vara stabila över längre tidsrymder.
 
@@ -87,7 +109,11 @@ $$
 
 Värdet för $\beta$ anges i tabell 2
 
-[tabell]
+| Ärende | $\mu_p$ | $\beta_p$ |
+| ------ | ------- | --------- |
+| Service och inköp | 12 | 0.0833 |
+| Rekreation | 28.5 | 0.0351 |
+
 
 
 ### Steg 3: Färdmedelsuppdelning
@@ -103,7 +129,7 @@ P^{(i,j)}(bike)(d_{ij}) = \frac{
 }
 $$
 
-[tabell]
+![Färdmedelsparametrar](modal-split-table.png)
 
 Ett antagande som görs är att alla har tillgång till en cykel och en elcykel. Detta antagande kan modereras med en koefficient som reflekterar tillgången till cykel och, framför allt, elcykel (som troligtvis ändras snabbt). Koefficienten appliceras på de beräknade flödena för att erhålla en mer representativ fördelning.
 
@@ -160,7 +186,7 @@ Den socio-ekonomiska statusen är aggregationen av tre underindikatorer:
 
 Enligt tabellen nedan är varje DeSO-område rangordnat enligt dessa indikatorer. Området ges 1 poäng om det återfinns bland de 20% bästa, 3 poäng för 20% sämsta och annars 2 poäng.
 
-[tabell]
+![Beskrivning av socio-ekonomiskt index](socio-economic-table.png)
 
 Om $S$ är poängen enligt tabellen så kan indexet $s$ beskrivas som:
 
@@ -299,4 +325,45 @@ Detta mått har ingen motsvarighet i litteraturen. Dess utforming motiveras med 
 Högre prioritet ges då åt vägsträckor som har högre värden för LTS och höga flödesvärden.
 
 
-## Implementering i QGIS/Python
+## Implementering i Python/QGIS
+
+Den presenterade teoretiska modellen har implementerats i Python i QGIS. QGIS är en öppen källkod GIS mjukvara. Första delen av examensarbetet gick ut på att köra alla beräkningar på testregionen Sörmland med målet att utveckla en generaliserad implementation som kan användas på valfritt område i Sverige eller hela landet. Således har implementationen gjorts som en QGIS insticksmodul skriven i Python som gör det möjligt att i stor mån automatisera beräkningarna.
+
+...
+
+### Färmedlesvalsmodellering
+
+Färmedelvalsmodelleringen görs med hjälp av logistisk regression. För själva beräkningen i Python används biblioteket `scikit-learn` som tillhandahåller en färdig implementation.
+
+Indata för beräkningarna är tabulerad data från den pappersbaserade nederländska resvaneundersökningen utförd 2017 (OViN). Denna RVU innehåller svar från över 36000 deltagare och består av ungefär 105000 resor. Relevant information som hämtas från RVU-datan är:
+
+- cykel- och elcykelinnehav
+- restid och distans för varje resa
+- ärende (9 alternativ) som har översatts till de ärendetyper som modellen baserar sig på
+- färdmedel för varje resa
+
+Logistisk regression har använts för beräkna de parametrar som används i sannolikhetsfunktionerna i modellen.
+
+Då dessa parametrar är beräknade utifrån individers faktiska resand så behöver processeringen inte upprepas den närmaste framtiden. Utöver det gör användingen av nederländsk resvanedata, där cykelandelen för alla resor är 27%, datasettet lämpligt för anvånding vid prognostisering då cykelandelen sammafaller med de uttalade mål om färdemeledsfördelning i det svenska transportsystemet.
+
+
+### Beräkningar i QGIS
+
+De beräkningar och algoritmer som används i QGIS insticksmodulen kan ge en inblick i hur modellen kan användas för att genererar konkret kartdata för använding i analys och beslutsfattande. Det här avsnittet går igenom hur Python koden är strukturerad och vilka beräkningar som görs.
+
+#### Förprocessering
+
+
+All geografisk indata som används i beräknigarna projiceras om till ett gemensamt meterbaserat koordinatsystem. Standardkoordinatsystem är SWEREF 99 TM (EPSG.3006). Alla geometrier görs även så kallat enkla, dvs varje objekt består av en sammanhållen geometri. DeSO och andra statistikområden gärs om till punktform geonom att beräkna centroiden för varje objekt. Besöksmål importerade från t.ex. OpenStreetMap ärendekategoriseras på basen OSM-objektets klass. Spatiella index byggs därefter för all destinationspunktdata för att effektivisera uppslag i efterföljande beräkningar.
+
+När all geografiska data är förberedd kan OD-matriser byggas genom att för varje startpunkt göra ett spatiellt uppslag på alla besöksmål inom en 30 km radie.
+
+
+#### Ruttberäkning och modellfuntioner
+
+I detta steg byggs en ruttgraf samt start- och målpunktsdata knyts till denna.
+
+
+
+
+

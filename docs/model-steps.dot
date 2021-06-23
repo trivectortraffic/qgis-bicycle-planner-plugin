@@ -1,0 +1,12 @@
+digraph model_steps {
+    A [label = "Resegenerering"]
+    B [label = "Resefördelning"]
+    C [label = "Färdmedelsval"]
+    D [label = "Aggregering"]
+    res [label = "Resultat"]
+    A -> B  [label = "mängden resor med start- och målpunkt"]
+    B -> C [label = "OD-matris"]
+    C -> D [label = "färdmedelsfördelning för varje OD-par"]
+    D -> res
+    D -> B
+}
