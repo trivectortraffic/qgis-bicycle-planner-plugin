@@ -8,6 +8,8 @@ from typing import Optional
 from qgis import processing
 from qgis.core import QgsVectorLayer, QgsProcessing
 
+from .params import MAX_DISTANCE_M
+
 
 def clone_layer(input_layer) -> QgsVectorLayer:
     input_layer.selectAll()
@@ -41,13 +43,14 @@ def make_deso_centroids(input_url: str) -> QgsVectorLayer:
     )
 
 
-def sigmoid(b0, b1, b2, b3, X):
+# P_m(d)
+def sigmoid(b0, b1, b2, b3, d):
     """
     Sigmoid fuction for mode choice
     """
-    X = float(X) / 30000
+    d = float(d) / MAX_DISTANCE_M  # TODO: Check that this is the correct scaling
     try:
-        S = 1 / (1 + math.exp(-(b0 + b1 * X + b2 * X ** 2 + b3 * math.sqrt(X))))
+        S = 1 / (1 + math.exp(-(b0 + b1 * d + b2 * d ** 2 + b3 * math.sqrt(d))))
     except OverflowError:
         S = 'inf'
     return S

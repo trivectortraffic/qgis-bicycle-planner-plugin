@@ -1,3 +1,5 @@
+MAX_DISTANCE_M = 30000
+
 poi_category_classes = {
     'leisure': [
         'attraction',

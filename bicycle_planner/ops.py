@@ -29,6 +29,7 @@ from qgis.core import (
 from PyQt5.QtCore import QVariant
 
 from .params import (
+    MAX_DISTANCE_M,
     poi_class_map,
     poi_categories,
     poi_gravity_values,
@@ -105,7 +106,6 @@ def generate_od_routes(
     origins_data: list,
     dests_data: list,
     od_data: list,
-    max_distance: int = 30000,
     return_layer: bool = True,
     feedback: QgsProcessingFeedback = None,
 ) -> QgsVectorLayer:
@@ -185,7 +185,8 @@ def generate_od_routes(
                 dest_point = dest_map[dest_fid]
                 dest_vertex_id = graph.findVertex(dest_point)
                 if tree[dest_vertex_id] != -1 and (
-                    cost[dest_vertex_id] <= max_distance or max_distance <= 0
+                    cost[dest_vertex_id] <= MAX_DISTANCE_M
+                    or MAX_DISTANCE_M <= 0  # TODO: enable skipping max distance
                 ):
                     route_distance = cost[dest_vertex_id]
                     # route_points = [graph.vertex(dest_vertex_id).point()]
