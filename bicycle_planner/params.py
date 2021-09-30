@@ -75,14 +75,37 @@ poi_categories = set(poi_category_classes.keys())
 poi_class_map = {v: c for c, vs in poi_category_classes.items() for v in vs}
 
 # TODO: integrate into common structure to prevent key mismatch (add tests)
+# Beta_p
 poi_gravity_values = {
+    'work': -0.0370,
     'leisure': -0.0351,
     'shopping': -0.0833,
     'services': -0.0833,
     'touring': -0.0351,
 }
 
+# T_p
+trip_generation = {
+    'work': 1.52,
+    'shopping': 0.18,
+    'service': 0.18,
+    'touring': 0.07,
+    'leisure': 0.4,
+}
+
+# alpha_m
+mode_split = {
+    'bike': 0.8,
+    'ebike': 0.2,
+}
+
 mode_params_bike = {
+    'work': [
+        0.5949151637706399,
+        -7.2431452984131885,
+        0.05740860644694539,
+        -0.18442318504135605,
+    ],
     'shopping': [
         -0.44391129463248735,
         0.045421282463330465,
@@ -109,6 +132,12 @@ mode_params_bike = {
     ],
 }
 mode_params_ebike = {
+    'work': [
+        0.07166876549536741,
+        -2.3744188449615566,
+        -1.7157610670509382,
+        -0.6012328640390996,
+    ],
     'shopping': [
         -0.6498748953606043,
         -0.29797345841414963,
