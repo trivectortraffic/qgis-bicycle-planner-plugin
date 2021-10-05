@@ -115,7 +115,7 @@ class Algorithm(QgsProcessingAlgorithm):
         pop_field = self.parameterAsString(parameters, self.POP_FIELD, context)
         class_field = self.parameterAsString(parameters, self.CLASS_FIELD, context)
 
-        if not network_source.wkbType() & QgsWkbTypes.LineString:
+        if QgsWkbTypes.isMultiType(network_source.wkbType()):
             result = processing.run(
                 'native:multiparttosingleparts',
                 {
@@ -128,7 +128,7 @@ class Algorithm(QgsProcessingAlgorithm):
             )['OUTPUT']
             network_source = context.takeResultLayer(result)
 
-        if not dests_source.wkbType() & QgsWkbTypes.LineString:
+        if QgsWkbTypes.isMultiType(dests_source.wkbType()):
             result = processing.run(
                 'native:multiparttosingleparts',
                 {
