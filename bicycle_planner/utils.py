@@ -6,7 +6,7 @@ from typing import Optional
 
 
 from qgis import processing
-from qgis.core import QgsVectorLayer, QgsProcessing
+from qgis.core import QgsVectorLayer, QgsProcessing, QgsWkbTypes
 
 from .params import MAX_DISTANCE_M
 
@@ -30,6 +30,28 @@ def ensure_singlepart(input_url: str) -> QgsVectorLayer:
             OUTPUT=QgsProcessing.TEMPORARY_OUTPUT,
         ),
     )['OUTPUT']
+
+
+def make_single(input_layer, **kwargs) -> QgsVectorLayer:
+    if QgsWkbTypes.isMultiType(input_layer.wkbType()):
+        result = processing.run(
+            'native:multiparttosingleparts',
+            {
+                'INPUT': input_layer,
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            **kwargs,
+        )['OUTPUT']
+
+        result_layer = (
+            result
+            if 'context' not in kwargs
+            else kwargs['context'].takeResultLayer(result)
+        )
+    else:
+        result_layer = input_layer
+
+    return result_layer
 
 
 def make_deso_centroids(input_url: str) -> QgsVectorLayer:
