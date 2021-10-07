@@ -4,30 +4,25 @@ import sys
 from qgis.core import QgsVectorLayer, QgsWkbTypes, QgsApplication
 
 from bicycle_planner.ops import prepare_od_data, generate_od_routes
-from bicycle_planner.utils import make_single
+from bicycle_planner.utils import make_single, make_centroid
 
 
 def test_foo_bar_baz(datadir, qgis_processing):
 
-    gpkg_path = os.path.join(datadir, 'sormland.gpkg')
-    print(gpkg_path)
+    net_path = os.path.join(datadir, 'net.fgb')
+    deso_path = os.path.join(datadir, 'deso.fgb')
+    poi_path = os.path.join(datadir, 'poi.fgb')
 
-    network_layer = make_single(
-        QgsVectorLayer(f'{gpkg_path}|layername=small_net', 'Network', 'ogr')
-    )
-    poi_layer = make_single(
-        QgsVectorLayer(f'{gpkg_path}|layername=small_poi', 'Network', 'ogr')
-    )
-    deso_layer = make_single(
-        QgsVectorLayer(f'{gpkg_path}|layername=small_deso', 'Network', 'ogr')
-    )
+    network_layer = make_single(QgsVectorLayer(net_path, 'Network', 'ogr'))
+    poi_layer = make_single(QgsVectorLayer(poi_path, 'POI', 'ogr'))
+    deso_layer = make_centroid(make_single(QgsVectorLayer(deso_path, 'DeSO', 'ogr')))
 
     assert network_layer.isValid(), network_layer
     assert poi_layer.isValid(), poi_layer
     assert deso_layer.isValid(), deso_layer
 
     origins_data, dests_data, od_data = prepare_od_data(
-        deso_layer, poi_layer, 'totalt', 'fclass'
+        deso_layer, poi_layer, 'befolkning_191231', 'fclass'
     )
 
     features = generate_od_routes(
