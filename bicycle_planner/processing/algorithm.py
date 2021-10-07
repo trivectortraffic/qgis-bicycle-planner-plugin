@@ -13,6 +13,7 @@ from qgis.core import (
 )
 
 from ..ops import get_fields, generate_od_routes, prepare_od_data
+from ..utils import make_single, make_centroids
 
 
 class Algorithm(QgsProcessingAlgorithm):
@@ -108,38 +109,35 @@ class Algorithm(QgsProcessingAlgorithm):
         # Retrieve the feature origins_source and sink. The 'sink_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        network_source = self.parameterAsSource(parameters, self.NETWORK, context)
-        origins_source = self.parameterAsSource(parameters, self.ORIGINS, context)
-        dests_source = self.parameterAsSource(parameters, self.DESTS, context)
+        network_source = self.parameterAsVectorLayer(parameters, self.NETWORK, context)
+        origins_source = self.parameterAsVectorLayer(parameters, self.ORIGINS, context)
+        dests_source = self.parameterAsVectorLayer(parameters, self.DESTS, context)
 
         pop_field = self.parameterAsString(parameters, self.POP_FIELD, context)
         class_field = self.parameterAsString(parameters, self.CLASS_FIELD, context)
 
-        if not network_source.wkbType() & QgsWkbTypes.LineString:
-            result = processing.run(
-                'native:multiparttosingleparts',
-                {
-                    'INPUT': parameters[self.NETWORK],
-                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
-                },
-                context=context,
-                feedback=feedback,
-                is_child_algorithm=True,
-            )['OUTPUT']
-            network_source = context.takeResultLayer(result)
+        network_source = make_single(
+            network_source,
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
+        )
 
-        if not dests_source.wkbType() & QgsWkbTypes.LineString:
-            result = processing.run(
-                'native:multiparttosingleparts',
-                {
-                    'INPUT': parameters[self.DESTS],
-                    'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
-                },
+        origins_source = make_centroids(
+            make_single(
+                origins_source,
                 context=context,
                 feedback=feedback,
                 is_child_algorithm=True,
-            )['OUTPUT']
-            dests_source = context.takeResultLayer(result)
+            )
+        )
+
+        dests_source = make_single(
+            dests_source,
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
+        )
 
         (sink, sink_id) = self.parameterAsSink(
             parameters,

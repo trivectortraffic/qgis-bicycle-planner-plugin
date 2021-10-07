@@ -6,7 +6,9 @@ from typing import Optional
 
 
 from qgis import processing
-from qgis.core import QgsVectorLayer, QgsProcessing
+from qgis.core import QgsVectorLayer, QgsProcessing, QgsWkbTypes
+
+from .params import MAX_DISTANCE_M
 
 
 def clone_layer(input_layer) -> QgsVectorLayer:
@@ -30,6 +32,53 @@ def ensure_singlepart(input_url: str) -> QgsVectorLayer:
     )['OUTPUT']
 
 
+def make_single(input_layer, **kwargs) -> QgsVectorLayer:
+    if QgsWkbTypes.isMultiType(input_layer.wkbType()):
+        result = processing.run(
+            'native:multiparttosingleparts',
+            {
+                'INPUT': input_layer,
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            **kwargs,
+        )['OUTPUT']
+
+        result_layer = (
+            result
+            if 'context' not in kwargs
+            else kwargs['context'].takeResultLayer(result)
+        )
+    else:
+        result_layer = input_layer
+
+    return result_layer
+
+
+def make_centroids(input_layer, **kwargs) -> QgsVectorLayer:
+    geom_type = QgsWkbTypes.geometryType(input_layer.wkbType())
+    if geom_type == QgsWkbTypes.PolygonGeometry:
+        result = processing.run(
+            'native:centroids',
+            {
+                'INPUT': input_layer,
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            **kwargs,
+        )['OUTPUT']
+
+        result_layer = (
+            result
+            if 'context' not in kwargs
+            else kwargs['context'].takeResultLayer(result)
+        )
+    elif geom_type == QgsWkbTypes.PointGeometry:
+        result_layer = input_layer
+    else:
+        raise Exception('Geometry must be Polygon or Point')
+
+    return result_layer
+
+
 def make_deso_centroids(input_url: str) -> QgsVectorLayer:
     processing.run(
         'native:centroids',
@@ -41,13 +90,14 @@ def make_deso_centroids(input_url: str) -> QgsVectorLayer:
     )
 
 
-def sigmoid(b0, b1, b2, b3, X):
+# P_m(d)
+def sigmoid(b0, b1, b2, b3, d):
     """
     Sigmoid fuction for mode choice
     """
-    X = float(X) / 30000
+    d = float(d) / MAX_DISTANCE_M  # TODO: Check that this is the correct scaling
     try:
-        S = 1 / (1 + math.exp(-(b0 + b1 * X + b2 * X ** 2 + b3 * math.sqrt(X))))
+        S = 1 / (1 + math.exp(-(b0 + b1 * d + b2 * d ** 2 + b3 * math.sqrt(d))))
     except OverflowError:
         S = 'inf'
     return S

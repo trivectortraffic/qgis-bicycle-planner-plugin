@@ -227,6 +227,17 @@ toml = "*"
 testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "requests", "xmlschema"]
 
 [[package]]
+name = "pytest-qgis"
+version = "0.1.0"
+description = "A pytest plugin for testing QGIS python plugins"
+category = "dev"
+optional = false
+python-versions = ">=3.5"
+
+[package.dependencies]
+pytest = ">=6.2.3"
+
+[[package]]
 name = "regex"
 version = "2021.4.4"
 description = "Alternative regular expression module, to replace re."
@@ -261,7 +272,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "c17ac1ca70e9b23e52288b0964b8b50a96dd74780811db1d4d517fde87c9233f"
+content-hash = "26360bcc6cafe807fe20ae251507034174c210664799b31163ca4b9d4459aac8"
 
 [metadata.files]
 appdirs = [
@@ -365,6 +376,10 @@ pyparsing = [
 pytest = [
     {file = "pytest-6.2.3-py3-none-any.whl", hash = "sha256:6ad9c7bdf517a808242b998ac20063c41532a570d088d77eec1ee12b0b5574bc"},
     {file = "pytest-6.2.3.tar.gz", hash = "sha256:671238a46e4df0f3498d1c3270e5deb9b32d25134c99b7d75370a68cfbe9b634"},
+]
+pytest-qgis = [
+    {file = "pytest-qgis-0.1.0.tar.gz", hash = "sha256:c30c865dd1e2fe0e232b8444984231edac5d95eca227003e8b8403c83ed47a9b"},
+    {file = "pytest_qgis-0.1.0-py3-none-any.whl", hash = "sha256:483eb7dedca689a8c269d1dc04c9364aeeb5307bcddd8d9a3a3558fc7e3d8614"},
 ]
 regex = [
     {file = "regex-2021.4.4-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:619d71c59a78b84d7f18891fe914446d07edd48dc8328c8e149cbe0929b4e000"},

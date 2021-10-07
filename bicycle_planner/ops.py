@@ -29,6 +29,7 @@ from qgis.core import (
 from PyQt5.QtCore import QVariant
 
 from .params import (
+    MAX_DISTANCE_M,
     poi_class_map,
     poi_categories,
     poi_gravity_values,
@@ -40,13 +41,13 @@ from .utils import timing, sigmoid
 Origin = namedtuple('Origin', 'fid point pop')
 Dest = namedtuple('Dest', 'fid point cat')
 Route = namedtuple(
-    'Route', 'origin_fid dest_fid cat distance exp fbike febike net_fids'
+    'Route', 'origin_fid dest_fid cat distance decay p_bike p_ebike net_fids'
 )
 
 
 class SaveFidStrategy(QgsNetworkStrategy):
     """
-    Strategy class to save the underlyging network link feature ids. The QGIS
+    Strategy class to save the underlying network link feature ids. The QGIS
     graph builder does not save information about the network used to build
     the routing graph. This class is a hack to enable mapping route_points paths back
     onto the network by querying the cost of each edge. The edge object returns
@@ -105,7 +106,6 @@ def generate_od_routes(
     origins_data: list,
     dests_data: list,
     od_data: list,
-    max_distance: int = 30000,
     return_layer: bool = True,
     feedback: QgsProcessingFeedback = None,
 ) -> QgsVectorLayer:
@@ -134,7 +134,9 @@ def generate_od_routes(
         bothDirectionValue='',
         defaultDirection=QgsVectorLayerDirector.DirectionBoth,
     )
+    # First strategy is for actual shortest distance calculation
     director.addStrategy(QgsNetworkDistanceStrategy())  # 0
+    # Second strategy is a hack to be able to recover the edge id
     director.addStrategy(SaveFidStrategy())  # 1
     builder = QgsGraphBuilder(crs)
 
@@ -173,6 +175,7 @@ def generate_od_routes(
             origin_vertex_id = graph.findVertex(origin_point)
 
             print('.', end='')
+            # Calculate the tree and cost using the distance strategy (#0)
             (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, origin_vertex_id, 0)
             print(':', end='')
 
@@ -185,15 +188,17 @@ def generate_od_routes(
                 dest_point = dest_map[dest_fid]
                 dest_vertex_id = graph.findVertex(dest_point)
                 if tree[dest_vertex_id] != -1 and (
-                    cost[dest_vertex_id] <= max_distance or max_distance <= 0
+                    cost[dest_vertex_id] <= MAX_DISTANCE_M
+                    or MAX_DISTANCE_M <= 0  # TODO: enable skipping max distance
                 ):
                     route_distance = cost[dest_vertex_id]
                     # route_points = [graph.vertex(dest_vertex_id).point()]
                     cur_vertex_id = dest_vertex_id
                     route_fids = []
-                    # Iterate the graph
+                    # Iterate the graph from dest to origin saving the edges
                     while cur_vertex_id != origin_vertex_id:
                         cur_edge = graph.edge(tree[cur_vertex_id])
+                        # Here we recover the edge id through strategy #1
                         route_fids.append(cur_edge.cost(1))
                         cur_vertex_id = cur_edge.fromVertex()
                         # route_points.append(graph.vertex(cur_vertex_id).point())
@@ -213,9 +218,9 @@ def generate_od_routes(
                     bike_params = mode_params_bike[category]
                     ebike_params = mode_params_ebike[category]
 
-                    exp = math.exp(gravity_value * route_distance / 1000.0)
-                    fbike = sigmoid(*bike_params, route_distance)
-                    febike = sigmoid(*ebike_params, route_distance)
+                    decay = math.exp(gravity_value * route_distance / 1000.0)
+                    p_bike = sigmoid(*bike_params, route_distance)
+                    p_ebike = sigmoid(*ebike_params, route_distance)
 
                     # TODO: use namedtuple or dataclass
                     routes.append(
@@ -224,9 +229,9 @@ def generate_od_routes(
                             dest_fid,
                             category,
                             route_distance,
-                            exp,
-                            fbike,
-                            febike,
+                            decay,
+                            p_bike,
+                            p_ebike,
                             route_fids,
                         )
                     )
@@ -236,16 +241,18 @@ def generate_od_routes(
 
     with timing('post process routes'):
         pop = {origin.fid: origin.pop for origin in origins_data}
-        exp_sums = {cat: defaultdict(float) for cat in poi_categories}
+        decay_sums = {cat: defaultdict(float) for cat in poi_categories}
         bike_values = {cat: defaultdict(float) for cat in poi_categories}
         ebike_values = {cat: defaultdict(float) for cat in poi_categories}
 
         for route in routes:
-            exp_sums[route.cat][route.origin_fid] += route.exp
+            decay_sums[route.cat][route.origin_fid] += route.decay
         for route in routes:
-            exp_sum = exp_sums[route.cat][route.origin_fid]
-            bike_value = pop[route.origin_fid] * route.fbike * route.exp / exp_sum
-            ebike_value = pop[route.origin_fid] * route.febike * route.exp / exp_sum
+            decay_sum = decay_sums[route.cat][route.origin_fid]
+            bike_value = pop[route.origin_fid] * route.p_bike * route.decay / decay_sum
+            ebike_value = (
+                pop[route.origin_fid] * route.p_ebike * route.decay / decay_sum
+            )
             for fid in route.net_fids:
                 bike_values[route.cat][fid] += bike_value
                 ebike_values[route.cat][fid] += ebike_value
