@@ -54,6 +54,31 @@ def make_single(input_layer, **kwargs) -> QgsVectorLayer:
     return result_layer
 
 
+def make_centroid(input_layer, **kwargs) -> QgsVectorLayer:
+    geom_type = QgsWkbTypes.geometryType(input_layer.wkbType())
+    if geom_type == QgsWkbTypes.PolygonGeometry:
+        result = processing.run(
+            'native:centroids',
+            {
+                'INPUT': input_layer,
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            **kwargs,
+        )['OUTPUT']
+
+        result_layer = (
+            result
+            if 'context' not in kwargs
+            else kwargs['context'].takeResultLayer(result)
+        )
+    elif geom_type == QgsWkbTypes.PointGeometry:
+        result_layer = input_layer
+    else:
+        raise Exception('Geometry must be Polygon or Point')
+
+    return result_layer
+
+
 def make_deso_centroids(input_url: str) -> QgsVectorLayer:
     processing.run(
         'native:centroids',
