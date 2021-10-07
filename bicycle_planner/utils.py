@@ -54,7 +54,7 @@ def make_single(input_layer, **kwargs) -> QgsVectorLayer:
     return result_layer
 
 
-def make_centroid(input_layer, **kwargs) -> QgsVectorLayer:
+def make_centroids(input_layer, **kwargs) -> QgsVectorLayer:
     geom_type = QgsWkbTypes.geometryType(input_layer.wkbType())
     if geom_type == QgsWkbTypes.PolygonGeometry:
         result = processing.run(

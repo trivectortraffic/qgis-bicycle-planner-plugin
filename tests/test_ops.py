@@ -4,7 +4,7 @@ import sys
 from qgis.core import QgsVectorLayer, QgsWkbTypes, QgsApplication
 
 from bicycle_planner.ops import prepare_od_data, generate_od_routes
-from bicycle_planner.utils import make_single, make_centroid
+from bicycle_planner.utils import make_single, make_centroids
 
 
 def test_foo_bar_baz(datadir, qgis_processing):
@@ -15,7 +15,7 @@ def test_foo_bar_baz(datadir, qgis_processing):
 
     network_layer = make_single(QgsVectorLayer(net_path, 'Network', 'ogr'))
     poi_layer = make_single(QgsVectorLayer(poi_path, 'POI', 'ogr'))
-    deso_layer = make_centroid(make_single(QgsVectorLayer(deso_path, 'DeSO', 'ogr')))
+    deso_layer = make_centroids(make_single(QgsVectorLayer(deso_path, 'DeSO', 'ogr')))
 
     assert network_layer.isValid(), network_layer
     assert poi_layer.isValid(), poi_layer
