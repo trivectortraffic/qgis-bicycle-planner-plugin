@@ -75,13 +75,14 @@ poi_categories = set(poi_category_classes.keys())
 poi_class_map = {v: c for c, vs in poi_category_classes.items() for v in vs}
 
 # TODO: integrate into common structure to prevent key mismatch (add tests)
+#       also fix sign mismatch... should be positive
 # Beta_p
 poi_gravity_values = {
-    'work': -0.0370,
-    'leisure': -0.0351,
-    'shopping': -0.0833,
-    'services': -0.0833,
-    'touring': -0.0351,
+    'work': 0.0370,
+    'leisure': 0.0351,
+    'shopping': 0.0833,
+    'services': 0.0833,
+    'touring': 0.0351,
 }
 
 # T_p

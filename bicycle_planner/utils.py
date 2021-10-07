@@ -1,4 +1,6 @@
 import math
+import psutil
+
 
 from contextlib import ContextDecorator
 from time import time
@@ -77,6 +79,11 @@ def make_centroids(input_layer, **kwargs) -> QgsVectorLayer:
         raise Exception('Geometry must be Polygon or Point')
 
     return result_layer
+
+
+def print_mem():
+    mem_mib = psutil.Process().memory_info().rss / (1024 * 1024)
+    print(f'{mem_mib:0.2f} MiB')
 
 
 def make_deso_centroids(input_url: str) -> QgsVectorLayer:

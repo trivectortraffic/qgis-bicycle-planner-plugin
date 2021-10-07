@@ -1,9 +1,9 @@
 import math
+import numpy as np
 
 from collections import defaultdict, namedtuple
 from typing import List
 
-from qgis import processing
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
     QgsVectorLayerDirector,
@@ -36,7 +36,7 @@ from .params import (
     mode_params_bike,
     mode_params_ebike,
 )
-from .utils import timing, sigmoid
+from .utils import timing, sigmoid, print_mem
 
 Origin = namedtuple('Origin', 'fid point pop')
 Dest = namedtuple('Dest', 'fid point cat')
@@ -161,9 +161,18 @@ def generate_od_routes(
     origin_map = dict(
         zip([origin.fid for origin in origins_data], tied_points[: len(origins_data)])
     )
+    origin_i = dict(
+        zip([origin.fid for origin in origins_data], range(len(origins_data)))
+    )
     dest_map = dict(
         zip([dest.fid for dest in dests_data], tied_points[len(origins_data) :])
     )
+    dest_i = dict(zip([dest.fid for dest in dests_data], range(len(dests_data))))
+
+    d_ij = np.zeros((len(origin_i), len(dest_i)))
+
+    print(d_ij.shape)
+
     dest_cat = {dest.fid: dest.cat for dest in dests_data}
 
     step = 100.0 / len(od_data)
@@ -218,9 +227,11 @@ def generate_od_routes(
                     bike_params = mode_params_bike[category]
                     ebike_params = mode_params_ebike[category]
 
-                    decay = math.exp(gravity_value * route_distance / 1000.0)
+                    decay = math.exp(-gravity_value * route_distance / 1000.0)
                     p_bike = sigmoid(*bike_params, route_distance)
                     p_ebike = sigmoid(*ebike_params, route_distance)
+
+                    d_ij[origin_i[origin_fid], dest_i[dest_fid]] = route_distance
 
                     # TODO: use namedtuple or dataclass
                     routes.append(
@@ -238,6 +249,38 @@ def generate_od_routes(
             feedback.setProgress(i * step)
 
         print()
+
+    with timing('numpy'):
+        N_j = len(dests_data)
+        N_i = len(origins_data)
+
+        print(d_ij, 'd_ij', d_ij.shape)
+
+        D_j = np.ones(N_j)
+        beta_j = np.array(
+            [poi_gravity_values.get(dest.cat, np.nan) for dest in dests_data]
+        )
+        print(beta_j, 'beta_j', beta_j.shape)
+        decay_ij = np.exp(-beta_j * d_ij / 1000.0)
+        print(decay_ij, 'decay_ij', decay_ij.shape)
+        decay_ij[np.isnan(decay_ij)] = 0
+        print(decay_ij, 'decay_ij', decay_ij.shape)
+        A_i = 1 / (D_j * decay_ij).sum(axis=1)
+        print(A_i, 'A_i', A_i.shape)
+        O_i = np.array([origin.pop for origin in origins_data])
+        print(O_i, 'O_i', O_i.shape)
+
+        T_ij = (
+            (A_i * O_i)[:, None] * D_j * decay_ij
+        )  # A_i O_i D_j f(d_ij), A_i = 1 / sum D_j f(d_ij)
+        print(T_ij, 'T_ij', T_ij.shape)
+
+    tmp_decay_ij = np.zeros(N_i * N_j).reshape(N_i, N_j)
+    for route in routes:
+        i = route.origin_fid - 1
+        j = route.dest_fid - 1
+        tmp_decay_ij[i, j] = route.decay
+    print(tmp_decay_ij)
 
     with timing('post process routes'):
         pop = {origin.fid: origin.pop for origin in origins_data}
@@ -290,6 +333,61 @@ def generate_od_routes(
             output_layer.addFeatures(segments, flags=QgsFeatureSink.FastInsert)
 
     return output_layer
+
+
+def vectorize(net_layer, origin_layer, dest_layer, origin_size_field, dest_size_field):
+    net_ids = net_layer.allFeatureIds()
+
+    crs = net_layer.crs()
+
+    net = QgsVectorLayer(f'LineString?crs={crs.toWkt()}', 'network', 'memory')
+
+    with timing('new net layer'), edit(net):
+        for i, feature in enumerate(net_layer.getFeatures()):
+            new = QgsFeature(i)
+            new.setGeometry(feature.geometry())
+            net.addFeature(new, flags=QgsFeatureSink.FastInsert)
+            new.setId(i)
+            net.updateFeature(new)
+
+    for feature in net.getFeatures():
+        print(feature.id())
+        break
+
+    print(min(net_ids), max(net_ids), len(net_ids))
+
+    director = QgsVectorLayerDirector(
+        source=net_layer,
+        directionFieldId=-1,
+        directDirectionValue='',
+        reverseDirectionValue='',
+        bothDirectionValue='',
+        defaultDirection=QgsVectorLayerDirector.DirectionBoth,
+    )
+    # First strategy is for actual shortest distance calculation
+    director.addStrategy(QgsNetworkDistanceStrategy())  # 0
+    # Second strategy is a hack to be able to recover the edge id
+    director.addStrategy(SaveFidStrategy())  # 1
+    builder = QgsGraphBuilder(net_layer.crs())
+
+    ## prepare points
+    points = [origin.geometry().asPoint() for origin in origin_layer.getFeatures()] + [
+        dest.geometry().asPoint() for dest in dest_layer.getFeatures()
+    ]
+
+    feedback = None
+    if feedback is None:
+        feedback = QgsProcessingFeedback()
+
+        def progress(p):
+            if int(10 * p % 100) == 0:
+                print(f'{int(p):#3d}%')
+
+        feedback.progressChanged.connect(progress)
+
+    with timing('build network graph'):
+        tied_points = director.makeGraph(builder, points, feedback=feedback)
+        graph = builder.graph()
 
 
 def get_fields():
