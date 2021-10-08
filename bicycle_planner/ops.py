@@ -4,6 +4,7 @@ import numpy as np
 from collections import defaultdict, namedtuple
 from typing import List
 
+from devtools import debug
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
     QgsVectorLayerDirector,
@@ -169,7 +170,7 @@ def generate_od_routes(
     )
     dest_i = dict(zip([dest.fid for dest in dests_data], range(len(dests_data))))
 
-    d_ij = np.zeros((len(origin_i), len(dest_i)))
+    d_ij = np.full((len(origin_i), len(dest_i)), fill_value=np.nan)
 
     print(d_ij.shape)
 
@@ -254,33 +255,67 @@ def generate_od_routes(
         N_j = len(dests_data)
         N_i = len(origins_data)
 
-        print(d_ij, 'd_ij', d_ij.shape)
+        debug(d_ij, 'd_ij', d_ij.shape)
 
         D_j = np.ones(N_j)
         beta_j = np.array(
             [poi_gravity_values.get(dest.cat, np.nan) for dest in dests_data]
         )
-        print(beta_j, 'beta_j', beta_j.shape)
+        debug(beta_j, 'beta_j', beta_j.shape)
+        debug(-beta_j * d_ij / 1000.0, 'expexp')
         decay_ij = np.exp(-beta_j * d_ij / 1000.0)
-        print(decay_ij, 'decay_ij', decay_ij.shape)
+        debug(decay_ij, 'decay_ij', decay_ij.shape)
         decay_ij[np.isnan(decay_ij)] = 0
-        print(decay_ij, 'decay_ij', decay_ij.shape)
+        debug(decay_ij, 'decay_ij', decay_ij.shape)
         A_i = 1 / (D_j * decay_ij).sum(axis=1)
-        print(A_i, 'A_i', A_i.shape)
+        debug(A_i, 'A_i', A_i.shape)
         O_i = np.array([origin.pop for origin in origins_data])
-        print(O_i, 'O_i', O_i.shape)
+        debug(O_i, 'O_i', O_i.shape)
 
-        T_ij = (
-            (A_i * O_i)[:, None] * D_j * decay_ij
-        )  # A_i O_i D_j f(d_ij), A_i = 1 / sum D_j f(d_ij)
-        print(T_ij, 'T_ij', T_ij.shape)
+        # A_i O_i D_j f(d_ij), A_i = 1 / sum D_j f(d_ij)
+        T_ij = (A_i * O_i)[:, None] * D_j * decay_ij
+        debug(T_ij, 'T_ij', T_ij.shape)
+
+        beta_p = np.array(
+            [
+                [
+                    mode_params_bike.get(dest.cat, [np.nan, np.nan, np.nan, np.nan]),
+                    mode_params_ebike.get(dest.cat, [np.nan, np.nan, np.nan, np.nan]),
+                ]
+                for dest in dests_data
+            ]
+        )
+        debug(beta_p, beta_p.shape)
+
+        beta = beta_p[:, 0, :].T
+        dd = np.array(
+            [
+                np.ones_like(d_ij),
+                d_ij / MAX_DISTANCE_M,
+                d_ij / MAX_DISTANCE_M ** 2,
+                np.sqrt(d_ij / MAX_DISTANCE_M),
+            ]
+        )
+
+        debug(beta, beta.shape, dd, dd.shape)
+        debug(beta[:, np.newaxis], beta[:, np.newaxis].shape)
+
+        exp = (beta[:, np.newaxis] * dd).sum(axis=0)
+        debug(exp, exp.shape)
+
+        P_ij = 1 / (1 + np.exp(-exp))
+        debug(P_ij, P_ij.shape)
 
     tmp_decay_ij = np.zeros(N_i * N_j).reshape(N_i, N_j)
+    tmp_pb_ij = np.zeros(N_i * N_j).reshape(N_i, N_j)
     for route in routes:
         i = route.origin_fid - 1
         j = route.dest_fid - 1
         tmp_decay_ij[i, j] = route.decay
-    print(tmp_decay_ij)
+        tmp_pb_ij[i, j] = route.p_bike
+    debug(tmp_decay_ij, tmp_pb_ij)
+
+    debug((decay_ij - tmp_decay_ij).sum())
 
     with timing('post process routes'):
         pop = {origin.fid: origin.pop for origin in origins_data}
