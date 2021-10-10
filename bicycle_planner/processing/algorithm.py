@@ -12,7 +12,7 @@ from qgis.core import (
     QgsVectorLayer,
 )
 
-from ..ops import get_fields, generate_od_routes, prepare_od_data
+from ..ops import get_fields, generate_od_routes
 from ..utils import make_single, make_centroids
 
 
@@ -148,15 +148,12 @@ class Algorithm(QgsProcessingAlgorithm):
             network_source.sourceCrs(),
         )
 
-        origins_data, dests_data, od_data = prepare_od_data(
-            origins_source, dests_source, pop_field, class_field
-        )
-
         features = generate_od_routes(
             network_layer=network_source,
-            origins_data=origins_data,
-            dests_data=dests_data,
-            od_data=od_data,
+            origins_source=origins_source,
+            dests_source=dests_source,
+            size_field=pop_field,
+            class_field=class_field,
             return_layer=False,
             feedback=feedback,
         )

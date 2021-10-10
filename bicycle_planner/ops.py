@@ -1,9 +1,10 @@
 import math
 
 from collections import defaultdict, namedtuple
+from time import time
 from typing import List
 
-from qgis import processing
+from devtools import debug
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
     QgsVectorLayerDirector,
@@ -38,11 +39,10 @@ from .params import (
 )
 from .utils import timing, sigmoid
 
-Origin = namedtuple('Origin', 'fid point pop')
-Dest = namedtuple('Dest', 'fid point cat')
-Route = namedtuple(
-    'Route', 'origin_fid dest_fid cat distance decay p_bike p_ebike net_fids'
-)
+
+MAX_NEIGHBORS = 9001
+
+Route = namedtuple('Route', 'i j cat distance decay p_bike p_ebike net_fids')
 
 
 class SaveFidStrategy(QgsNetworkStrategy):
@@ -63,50 +63,15 @@ class SaveFidStrategy(QgsNetworkStrategy):
 
 
 @timing()
-def prepare_od_data(
-    origins_source,
-    dests_source,
-    pop_field: str,
-    class_field: str,
-    max_distance: int = 25000,
-):
-    origins_data = [
-        Origin(feature.id(), feature.geometry().asPoint(), feature[pop_field])
-        for feature in origins_source.getFeatures()
-    ]
-
-    dests_data = [
-        Dest(
-            feature.id(),
-            feature.geometry().asPoint(),
-            poi_class_map.get(feature[class_field]),
-        )
-        for feature in dests_source.getFeatures()
-    ]
-
-    dests_sidx = QgsSpatialIndex(dests_source)
-    od_data = []
-    for feature in origins_source.getFeatures():
-        point = feature.geometry().asPoint()
-        od_data.append(
-            (
-                feature.id(),
-                dests_sidx.nearestNeighbor(
-                    point, neighbors=9001, maxDistance=max_distance
-                ),  # FIXME: no hardcoded values
-            )
-        )
-
-    return origins_data, dests_data, od_data
-
-
-@timing()
 def generate_od_routes(
     network_layer: QgsVectorLayer,
-    origins_data: list,
-    dests_data: list,
-    od_data: list,
+    origins_source,
+    dests_source,
+    size_field: str,
+    class_field: str,
+    max_distance: int = 25000,
     return_layer: bool = True,
+    return_raw: bool = False,
     feedback: QgsProcessingFeedback = None,
 ) -> QgsVectorLayer:
     """
@@ -140,10 +105,34 @@ def generate_od_routes(
     director.addStrategy(SaveFidStrategy())  # 1
     builder = QgsGraphBuilder(crs)
 
+    ## spatial index
+
+    dest_sidx = QgsSpatialIndex(dests_source)
+
     ## prepare points
-    points = [origin.point for origin in origins_data] + [
-        dest.point for dest in dests_data
-    ]
+    orig_n = len(origins_source)
+    dest_n = len(dests_source)
+
+    orig_points = [None] * orig_n
+    orig_sizes = [None] * orig_n
+    dest_points = [None] * dest_n
+    dest_sizes = [None] * dest_n
+    dest_fids = [None] * dest_n
+    dest_cats = [None] * dest_n
+
+    for i, feat in enumerate(origins_source.getFeatures()):
+        orig_points[i] = feat.geometry().asPoint()
+        orig_sizes[i] = feat[size_field]
+
+    for i, feat in enumerate(dests_source.getFeatures()):
+        dest_points[i] = feat.geometry().asPoint()
+        dest_fids[i] = feat.id()
+        dest_sizes[i] = 1  # TODO: dest size
+        dest_cats[i] = poi_class_map.get(feat[class_field])
+
+    # points = [origin.point for origin in origins_data] + [
+    #    dest.point for dest in dests_data
+    # ]
 
     if feedback is None:
         feedback = QgsProcessingFeedback()
@@ -155,37 +144,45 @@ def generate_od_routes(
         feedback.progressChanged.connect(progress)
 
     with timing('build network graph'):
-        tied_points = director.makeGraph(builder, points, feedback=feedback)
+        tied_points = director.makeGraph(
+            builder, orig_points + dest_points, feedback=feedback
+        )
         graph = builder.graph()
 
-    origin_map = dict(
-        zip([origin.fid for origin in origins_data], tied_points[: len(origins_data)])
-    )
-    dest_map = dict(
-        zip([dest.fid for dest in dests_data], tied_points[len(origins_data) :])
-    )
-    dest_cat = {dest.fid: dest.cat for dest in dests_data}
+    orig_tied_points = tied_points[:orig_n]
+    dest_tied_points = tied_points[orig_n:]
 
-    step = 100.0 / len(od_data)
+    dest_fid_to_tied_points = dict(zip(dest_fids, enumerate(dest_tied_points)))
+
+    orig_dests = [None] * orig_n
+    for i, point in enumerate(orig_points):
+        orig_dests[i] = [
+            dest_fid_to_tied_points[fid]
+            for fid in dest_sidx.nearestNeighbor(
+                point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
+            )
+        ]
+
+    step = 100.0 / orig_n
+    time_dijkstra = 0.0
+    time_route = 0.0
     with timing('calculate connecting routes'):
         routes = []
-        for i, (origin_fid, dest_fids) in enumerate(od_data):
-            origin_point = origin_map[origin_fid]
-            # TODO: check for NullIsland point (0.0, 0.0) == not found on network
-            origin_vertex_id = graph.findVertex(origin_point)
+        # for i, (origin_fid, dest_fids) in enumerate(od_data):
+        for i, (orig_point, dests) in enumerate(zip(orig_tied_points, orig_dests)):
+            origin_vertex_id = graph.findVertex(orig_point)
 
-            print('.', end='')
             # Calculate the tree and cost using the distance strategy (#0)
+            ts = time()
             (tree, cost) = QgsGraphAnalyzer.dijkstra(graph, origin_vertex_id, 0)
-            print(':', end='')
+            time_dijkstra += time() - ts
 
-            for dest_fid in dest_fids:
+            for j, dest_point in dests:
                 if feedback.isCanceled():
                     return
-                category = dest_cat[dest_fid]
+                category = dest_cats[j]
                 if category is None:
                     continue
-                dest_point = dest_map[dest_fid]
                 dest_vertex_id = graph.findVertex(dest_point)
                 if tree[dest_vertex_id] != -1 and (
                     cost[dest_vertex_id] <= MAX_DISTANCE_M
@@ -196,12 +193,14 @@ def generate_od_routes(
                     cur_vertex_id = dest_vertex_id
                     route_fids = []
                     # Iterate the graph from dest to origin saving the edges
+                    ts = time()
                     while cur_vertex_id != origin_vertex_id:
                         cur_edge = graph.edge(tree[cur_vertex_id])
                         # Here we recover the edge id through strategy #1
                         route_fids.append(cur_edge.cost(1))
                         cur_vertex_id = cur_edge.fromVertex()
                         # route_points.append(graph.vertex(cur_vertex_id).point())
+                    time_route += time() - ts
 
                     # route_points.reverse()
                     # route_geom = QgsGeometry.fromPolylineXY(route_points))
@@ -218,15 +217,18 @@ def generate_od_routes(
                     bike_params = mode_params_bike[category]
                     ebike_params = mode_params_ebike[category]
 
-                    decay = math.exp(gravity_value * route_distance / 1000.0)
+                    # NOTE: we include dest size in decay here
+                    decay = dest_sizes[j] * math.exp(
+                        gravity_value * route_distance / 1000.0
+                    )
                     p_bike = sigmoid(*bike_params, route_distance)
                     p_ebike = sigmoid(*ebike_params, route_distance)
 
                     # TODO: use namedtuple or dataclass
                     routes.append(
                         Route(
-                            origin_fid,
-                            dest_fid,
+                            i,
+                            j,
                             category,
                             route_distance,
                             decay,
@@ -237,25 +239,27 @@ def generate_od_routes(
                     )
             feedback.setProgress(i * step)
 
-        print()
+        print(f'dijkstra took: {time_dijkstra:#1.2f} sec')
+        print(f'route took: {time_route:#1.2f} sec')
 
     with timing('post process routes'):
-        pop = {origin.fid: origin.pop for origin in origins_data}
         decay_sums = {cat: defaultdict(float) for cat in poi_categories}
         bike_values = {cat: defaultdict(float) for cat in poi_categories}
         ebike_values = {cat: defaultdict(float) for cat in poi_categories}
 
         for route in routes:
-            decay_sums[route.cat][route.origin_fid] += route.decay
+            # NOTE: dest size is included in decay
+            decay_sums[route.cat][route.i] += route.decay
         for route in routes:
-            decay_sum = decay_sums[route.cat][route.origin_fid]
-            bike_value = pop[route.origin_fid] * route.p_bike * route.decay / decay_sum
-            ebike_value = (
-                pop[route.origin_fid] * route.p_ebike * route.decay / decay_sum
-            )
+            decay_sum = decay_sums[route.cat][route.i]
+            bike_value = orig_sizes[route.i] * route.p_bike * route.decay / decay_sum
+            ebike_value = orig_sizes[route.i] * route.p_ebike * route.decay / decay_sum
             for fid in route.net_fids:
                 bike_values[route.cat][fid] += bike_value
                 ebike_values[route.cat][fid] += ebike_value
+
+    if return_raw:
+        return bike_values, ebike_values
 
     # FIXME: Un-kludge this
     with timing('create result features'):

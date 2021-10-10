@@ -70,7 +70,7 @@ poi_category_classes = {
     ],
 }
 
-poi_categories = set(poi_category_classes.keys())
+poi_categories = set(poi_category_classes.keys()) | {'work', 'school'}
 
 poi_class_map = {v: c for c, vs in poi_category_classes.items() for v in vs}
 

@@ -1,9 +1,10 @@
 import os.path
 import sys
 
+from devtools import debug
 from qgis.core import QgsVectorLayer, QgsWkbTypes, QgsApplication
 
-from bicycle_planner.ops import prepare_od_data, generate_od_routes
+from bicycle_planner.ops import generate_od_routes
 from bicycle_planner.utils import make_single, make_centroids
 
 
@@ -21,14 +22,12 @@ def test_foo_bar_baz(datadir, qgis_processing):
     assert poi_layer.isValid(), poi_layer
     assert deso_layer.isValid(), deso_layer
 
-    origins_data, dests_data, od_data = prepare_od_data(
-        deso_layer, poi_layer, 'befolkning_191231', 'fclass'
-    )
-
-    features = generate_od_routes(
+    bike_v, ebke_v = generate_od_routes(
         network_layer=network_layer,
-        origins_data=origins_data,
-        dests_data=dests_data,
-        od_data=od_data,
+        origins_source=deso_layer,
+        dests_source=poi_layer,
+        size_field='befolkning_191231',
+        class_field='fclass',
         return_layer=False,
+        return_raw=True,
     )
