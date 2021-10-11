@@ -227,6 +227,8 @@ def generate_od_routes(
             for j, dest_point in dests:
                 if feedback.isCanceled():
                     return
+                if dest_sizes[j] <= 0:
+                    continue
                 category = dest_cats[j]
                 if category is None:
                     continue
