@@ -37,6 +37,7 @@ from .params import (
     poi_gravity_values,
     mode_params_bike,
     mode_params_ebike,
+    trip_generation,
 )
 from .utils import timing, sigmoid
 
@@ -292,6 +293,9 @@ def generate_od_routes(
         print(f'route took: {time_route:#1.2f} sec')
 
     with timing('post process routes'):
+        alpha_bike = 0.8
+        alpha_ebke = 0.2
+
         decay_sums = {cat: defaultdict(float) for cat in poi_categories}
         bike_values = {cat: defaultdict(float) for cat in poi_categories}
         ebike_values = {cat: defaultdict(float) for cat in poi_categories}
@@ -301,14 +305,27 @@ def generate_od_routes(
             decay_sums[route.cat][route.i] += route.decay
         for route in routes:
             decay_sum = decay_sums[route.cat][route.i]
-            bike_value = orig_sizes[route.i] * route.p_bike * route.decay / decay_sum
-            ebike_value = orig_sizes[route.i] * route.p_ebike * route.decay / decay_sum
+            # TODO: add T_p and alpha_m
+            T_p = trip_generation[route.cat]
+            bike_value = (
+                T_p
+                * alpha_bike
+                * orig_sizes[route.i]
+                * route.p_bike
+                * route.decay
+                / decay_sum
+            )
+            ebike_value = (
+                T_p
+                * alpha_ebke
+                * orig_sizes[route.i]
+                * route.p_ebike
+                * route.decay
+                / decay_sum
+            )
             for fid in route.net_fids:
-                bike_values[route.cat][fid] += bike_value
-                ebike_values[route.cat][fid] += ebike_value
-
-    if return_raw:
-        return bike_values, ebike_values
+                bike_values[route.cat][fid] += float(bike_value)
+                ebike_values[route.cat][fid] += float(ebike_value)
 
     # FIXME: Un-kludge this
     with timing('create result features'):
@@ -321,16 +338,25 @@ def generate_od_routes(
             segment.setGeometry(QgsGeometry(feature.geometry()))
 
             segment['network_fid'] = fid
+            flow = 0.0
             for cat in poi_categories:
                 bike_field = f'{cat}_bike_value'
                 ebike_field = f'{cat}_ebike_value'
 
-                segment[bike_field] = bike_values[cat].get(fid)
-                segment[ebike_field] = ebike_values[cat].get(fid)
+                flow_bike = segment[bike_field] = bike_values[cat].get(fid)
+                flow_ebke = segment[ebike_field] = ebike_values[cat].get(fid)
 
+                if flow_bike is not None:
+                    flow += flow_bike
+                if flow_ebke is not None:
+                    flow += flow_ebke
+
+            segment['flow'] = flow
             segments.append(segment)
 
     if not return_layer:
+        if return_raw:
+            return segments, bike_values, ebike_values
         return segments
 
     with timing('create result layer'):
@@ -348,6 +374,7 @@ def generate_od_routes(
 def get_fields():
     fields = QgsFields()
     fields.append(QgsField('network_fid', QVariant.Int))
+    fields.append(QgsField('flow', QVariant.Int))
     for cat in poi_categories:
         bike_field = f'{cat}_bike_value'
         ebike_field = f'{cat}_ebike_value'

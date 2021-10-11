@@ -190,15 +190,6 @@ class Algorithm(QgsProcessingAlgorithm):
             is_child_algorithm=True,
         )
 
-        (sink, sink_id) = self.parameterAsSink(
-            parameters,
-            self.OUTPUT,
-            context,
-            get_fields(),
-            network_layer.wkbType(),
-            network_layer.sourceCrs(),
-        )
-
         features = generate_od_routes(
             network_layer=network_layer,
             origin_layer=origins_layer,
@@ -211,11 +202,23 @@ class Algorithm(QgsProcessingAlgorithm):
             feedback=feedback,
         )
 
+        (sink, sink_id) = self.parameterAsSink(
+            parameters,
+            self.OUTPUT,
+            context,
+            features[0].fields(),
+            network_layer.wkbType(),
+            network_layer.sourceCrs(),
+        )
+
         step = 100.0 / len(features)
         for i, feature in enumerate(features):
             if feedback.isCanceled():
                 break
-            sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            r = sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            if not r:
+                print(feature, [(value, type(value)) for value in feature.attributes()])
+                break
             feedback.setProgress(i * step)
 
         return {self.OUTPUT: sink_id}

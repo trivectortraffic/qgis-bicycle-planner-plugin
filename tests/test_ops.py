@@ -38,7 +38,7 @@ def test_foo_bar_baz(datadir, qgis_processing):
             index_field = header.index('Index')
             socio_data = {row[0]: float(row[index_field]) for row in reader}
 
-    bike_v, ebke_v = generate_od_routes(
+    features, bike_v, ebke_v = generate_od_routes(
         network_layer=network_layer,
         origin_layer=deso_layer,
         poi_layer=poi_layer,

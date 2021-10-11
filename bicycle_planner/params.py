@@ -78,6 +78,7 @@ poi_class_map = {v: c for c, vs in poi_category_classes.items() for v in vs}
 # Beta_p
 poi_gravity_values = {
     'work': -0.0370,
+    'school': -0.0370,
     'leisure': -0.0351,
     'shopping': -0.0833,
     'services': -0.0833,
@@ -87,8 +88,9 @@ poi_gravity_values = {
 # T_p
 trip_generation = {
     'work': 1.52,
+    'school': 1.52,
     'shopping': 0.18,
-    'service': 0.18,
+    'services': 0.18,
     'touring': 0.07,
     'leisure': 0.4,
 }
