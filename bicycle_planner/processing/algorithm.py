@@ -10,6 +10,7 @@ from qgis.core import (
     QgsWkbTypes,
     QgsProcessingParameterVectorDestination,
     QgsVectorLayer,
+    QgsProcessingParameterFile,
 )
 
 from ..ops import get_fields, generate_od_routes
@@ -37,8 +38,12 @@ class Algorithm(QgsProcessingAlgorithm):
     NETWORK = 'NETWORK'
     ORIGINS = 'ORIGINS'
     DESTS = 'DESTINATIONS'
+    WORK = 'WORK'
+
+    SOCIO_FILE = 'SOCIO_FILE'
 
     POP_FIELD = 'POPULATION_FIELD'
+    WORK_FIELD = 'WORK_FIELD'
     CLASS_FIELD = 'CLASS_FIELD'
 
     OUTPUT = 'OUTPUT'
@@ -94,6 +99,35 @@ class Algorithm(QgsProcessingAlgorithm):
             )
         )
 
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.WORK,
+                self.tr('Work places layer'),
+                [QgsProcessing.TypeVectorAnyGeometry],
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.WORK_FIELD,
+                self.tr('Size of workplace field'),
+                defaultValue='Totalt',
+                parentLayerParameterName=self.WORK,
+                optional=False,
+                type=QgsProcessingParameterField.Numeric,
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterFile(
+                self.SOCIO_FILE,
+                self.tr('Socio-economic data'),
+                optional=True,
+                extension='csv',
+                # help='Comma separated must have a header where the first value is the join value on origins and the second column contains socio economic index values',
+            )
+        )
+
         # We add a feature sink in which to store our processed features (this
         # usually takes the form of a newly created vector layer when the
         # algorithm is run in QGIS).
@@ -112,27 +146,44 @@ class Algorithm(QgsProcessingAlgorithm):
         network_source = self.parameterAsVectorLayer(parameters, self.NETWORK, context)
         origins_source = self.parameterAsVectorLayer(parameters, self.ORIGINS, context)
         dests_source = self.parameterAsVectorLayer(parameters, self.DESTS, context)
+        work_source = self.parameterAsVectorLayer(parameters, self.WORK, context)
 
         pop_field = self.parameterAsString(parameters, self.POP_FIELD, context)
         class_field = self.parameterAsString(parameters, self.CLASS_FIELD, context)
+        work_field = self.parameterAsString(parameters, self.WORK_FIELD, context)
 
-        network_source = make_single(
+        network_layer = make_single(
             network_source,
             context=context,
             feedback=feedback,
             is_child_algorithm=True,
         )
 
-        origins_source = make_centroids(
+        origins_layer = make_centroids(
             make_single(
                 origins_source,
                 context=context,
                 feedback=feedback,
                 is_child_algorithm=True,
-            )
+            ),
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
         )
 
-        dests_source = make_single(
+        work_layer = make_centroids(
+            make_single(
+                work_source,
+                context=context,
+                feedback=feedback,
+                is_child_algorithm=True,
+            ),
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
+        )
+
+        dests_layer = make_single(
             dests_source,
             context=context,
             feedback=feedback,
@@ -144,14 +195,16 @@ class Algorithm(QgsProcessingAlgorithm):
             self.OUTPUT,
             context,
             get_fields(),
-            network_source.wkbType(),
-            network_source.sourceCrs(),
+            network_layer.wkbType(),
+            network_layer.sourceCrs(),
         )
 
         features = generate_od_routes(
-            network_layer=network_source,
-            origins_source=origins_source,
-            dests_source=dests_source,
+            network_layer=network_layer,
+            origin_layer=origins_layer,
+            poi_layer=dests_layer,
+            work_layer=work_layer,
+            work_size_field=work_field,
             size_field=pop_field,
             class_field=class_field,
             return_layer=False,

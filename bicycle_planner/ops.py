@@ -4,6 +4,7 @@ from collections import defaultdict, namedtuple
 from time import time
 from typing import List
 
+import numpy as np
 from devtools import debug
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
@@ -65,10 +66,16 @@ class SaveFidStrategy(QgsNetworkStrategy):
 @timing()
 def generate_od_routes(
     network_layer: QgsVectorLayer,
-    origins_source,
-    dests_source,
+    origin_layer: QgsVectorLayer,
+    poi_layer: QgsVectorLayer,
     size_field: str,
     class_field: str,
+    work_layer: QgsVectorLayer = None,
+    work_size_field: str = None,
+    socio_data=None,
+    health_data=None,
+    diversity_data=None,
+    join_on: str = None,
     max_distance: int = 25000,
     return_layer: bool = True,
     return_raw: bool = False,
@@ -107,28 +114,55 @@ def generate_od_routes(
 
     ## spatial index
 
-    dest_sidx = QgsSpatialIndex(dests_source)
+    poi_sidx = QgsSpatialIndex(poi_layer)
+    work_sidx = QgsSpatialIndex(work_layer)
 
     ## prepare points
-    orig_n = len(origins_source)
-    dest_n = len(dests_source)
+    orig_n = len(origin_layer)
+    poi_n = len(poi_layer)
+    work_n = len(work_layer) if work_layer else 0
+    dest_n = poi_n + work_n
 
     orig_points = [None] * orig_n
-    orig_sizes = [None] * orig_n
+    orig_sizes = np.zeros(orig_n, dtype=float)
+    if socio_data:
+        orig_socio = np.zeros(orig_n, dtype=float)
     dest_points = [None] * dest_n
     dest_sizes = [None] * dest_n
     dest_fids = [None] * dest_n
     dest_cats = [None] * dest_n
 
-    for i, feat in enumerate(origins_source.getFeatures()):
+    debug([field.name() for field in origin_layer.fields()])
+
+    orig_id_field = 'deso'
+    for i, feat in enumerate(origin_layer.getFeatures()):
         orig_points[i] = feat.geometry().asPoint()
         orig_sizes[i] = feat[size_field]
 
-    for i, feat in enumerate(dests_source.getFeatures()):
+        if socio_data:
+            orig_socio[i] = socio_data[
+                feat[orig_id_field]
+            ]  # FIXME: check if all origins have data
+
+    if socio_data:
+        debug(orig_socio)
+        orig_socio = orig_socio / np.mean(orig_socio)
+        debug(orig_socio, orig_sizes)
+        orig_sizes *= orig_socio
+        debug(orig_sizes)
+
+    for i, feat in enumerate(poi_layer.getFeatures()):
         dest_points[i] = feat.geometry().asPoint()
         dest_fids[i] = feat.id()
         dest_sizes[i] = 1  # TODO: dest size
         dest_cats[i] = poi_class_map.get(feat[class_field])
+
+    if work_layer:
+        for i, feat in enumerate(work_layer.getFeatures(), start=poi_n):
+            dest_points[i] = feat.geometry().asPoint()
+            dest_fids[i] = feat.id()
+            dest_sizes[i] = feat[work_size_field]  # TODO: dest size
+            dest_cats[i] = 'work'
 
     # points = [origin.point for origin in origins_data] + [
     #    dest.point for dest in dests_data
@@ -152,13 +186,26 @@ def generate_od_routes(
     orig_tied_points = tied_points[:orig_n]
     dest_tied_points = tied_points[orig_n:]
 
+    poi_tied_points = dest_tied_points[:poi_n]
+    work_tied_points = dest_tied_points[poi_n:]
+
     dest_fid_to_tied_points = dict(zip(dest_fids, enumerate(dest_tied_points)))
+
+    poi_fid_to_tied_points = dict(zip(dest_fids[:poi_n], enumerate(poi_tied_points)))
+    work_fid_to_tied_points = dict(
+        zip(dest_fids[poi_n:], enumerate(work_tied_points, start=poi_n))
+    )
 
     orig_dests = [None] * orig_n
     for i, point in enumerate(orig_points):
         orig_dests[i] = [
-            dest_fid_to_tied_points[fid]
-            for fid in dest_sidx.nearestNeighbor(
+            poi_fid_to_tied_points[fid]
+            for fid in poi_sidx.nearestNeighbor(
+                point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
+            )
+        ] + [
+            work_fid_to_tied_points[fid]
+            for fid in work_sidx.nearestNeighbor(
                 point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
             )
         ]
