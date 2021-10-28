@@ -213,6 +213,7 @@ def generate_od_routes(
 
     step = 100.0 / orig_n
     time_dijkstra = 0.0
+    time_find = 0.0
     time_route = 0.0
     with timing('calculate connecting routes'):
         routes = []
@@ -233,7 +234,9 @@ def generate_od_routes(
                 category = dest_cats[j]
                 if category is None:
                     continue
+                ts = time()
                 dest_vertex_id = graph.findVertex(dest_point)
+                time_find += time() - ts
                 if tree[dest_vertex_id] != -1 and (
                     cost[dest_vertex_id] <= MAX_DISTANCE_M
                     or MAX_DISTANCE_M <= 0  # TODO: enable skipping max distance
@@ -290,6 +293,7 @@ def generate_od_routes(
             feedback.setProgress(i * step)
 
         print(f'dijkstra took: {time_dijkstra:#1.2f} sec')
+        print(f'find vertex took: {time_find:#1.2f} sec')
         print(f'route took: {time_route:#1.2f} sec')
 
     with timing('post process routes'):
