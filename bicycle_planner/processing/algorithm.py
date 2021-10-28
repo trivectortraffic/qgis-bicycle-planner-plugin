@@ -17,7 +17,7 @@ from ..ops import get_fields, generate_od_routes
 from ..utils import make_single, make_centroids
 
 
-class Algorithm(QgsProcessingAlgorithm):
+class FlowAlgorithm(QgsProcessingAlgorithm):
     """
     This is an example algorithm that takes a vector layer and
     creates a new identical one.
@@ -261,4 +261,114 @@ class Algorithm(QgsProcessingAlgorithm):
         return string  # QCoreApplication.translate('Processing', string)
 
     def createInstance(self):
-        return Algorithm()
+        return FlowAlgorithm()
+
+
+class NvdbAlgorithm(QgsProcessingAlgorithm):
+    """
+    This is an example algorithm that takes a vector layer and
+    creates a new identical one.
+
+    It is meant to be used as an example of how to create your own
+    algorithms and explain methods and variables used to do it. An
+    algorithm like this will be available in all elements, and there
+    is not need for additional work.
+
+    All Processing algorithms should extend the QgsProcessingAlgorithm
+    class.
+    """
+
+    # Constants used to refer to parameters and outputs. They will be
+    # used when calling the algorithm from another algorithm, or when
+    # calling from the QGIS console.
+
+    NETWORK = 'NETWORK'
+    OUTPUT = 'OUTPUT'
+
+    def initAlgorithm(self, config):
+        """
+        Here we define the inputs and output of the algorithm, along
+        with some other properties.
+        """
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.NETWORK,
+                self.tr('Network layer'),
+                [QgsProcessing.TypeVectorLine],
+            )
+        )
+
+        # We add a feature sink in which to store our processed features (this
+        # usually takes the form of a newly created vector layer when the
+        # algorithm is run in QGIS).
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Output layer'))
+        )
+
+    def processAlgorithm(self, parameters, context, feedback):
+        """
+        Here is where the processing itself takes place.
+        """
+
+        # Retrieve the feature origins_source and sink. The 'sink_id' variable is used
+        # to uniquely identify the feature sink, and must be included in the
+        # dictionary returned by the processAlgorithm function.
+        network_source = self.parameterAsVectorLayer(parameters, self.NETWORK, context)
+
+        network_layer = make_single(
+            network_source,
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
+        )
+
+        (sink, sink_id) = self.parameterAsSink(
+            parameters,
+            name=self.OUTPUT,
+            context=context,
+            fields=None,
+            geometryType=network_layer.wkbType(),
+            crs=network_layer.sourceCrs(),
+        )
+
+        return {self.OUTPUT: sink_id}
+
+    def name(self):
+        """
+        Returns the algorithm name, used for identifying the algorithm. This
+        string should be fixed for the algorithm, and must not be localised.
+        The name should be unique within each provider. Names should contain
+        lowercase alphanumeric characters only and no spaces or other
+        formatting characters.
+        """
+        return 'classifynvdb'
+
+    def displayName(self):
+        """
+        Returns the translated algorithm name, which should be used for any
+        user-visible display of the algorithm name.
+        """
+        return self.tr('Classify NVDB network')
+
+    def group(self):
+        """
+        Returns the name of the group this algorithm belongs to. This string
+        should be localised.
+        """
+        return self.tr('Vector processing')
+
+    def groupId(self):
+        """
+        Returns the unique ID of the group this algorithm belongs to. This
+        string should be fixed for the algorithm, and must not be localised.
+        The group id should be unique within each provider. Group id should
+        contain lowercase alphanumeric characters only and no spaces or other
+        formatting characters.
+        """
+        return 'vector'
+
+    def tr(self, string):
+        return string  # QCoreApplication.translate('Processing', string)
+
+    def createInstance(self):
+        return NvdbAlgorithm()

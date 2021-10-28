@@ -3,7 +3,7 @@ import os.path
 from qgis.core import QgsProcessingProvider
 from qgis.PyQt.QtGui import QIcon
 
-from .algorithm import Algorithm
+from .algorithm import FlowAlgorithm, NvdbAlgorithm
 from ..assets import icon
 
 
@@ -26,7 +26,8 @@ class Provider(QgsProcessingProvider):
         Loads all algorithms belonging to this provider.
         """
         print('provider loadAlgo')
-        self.addAlgorithm(Algorithm())
+        self.addAlgorithm(FlowAlgorithm())
+        self.addAlgorithm(NvdbAlgorithm())
         # add additional algorithms here
         # self.addAlgorithm(MyOtherAlgorithm())
 
