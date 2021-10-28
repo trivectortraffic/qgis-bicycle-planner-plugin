@@ -7,11 +7,19 @@ from qgis.core import (
     QgsProcessingParameterFeatureSink,
     QgsProcessingParameterFeatureSource,
     QgsProcessingParameterField,
+    QgsFeature,
+    QgsFields,
+    QgsField,
+    QgsSpatialIndex,
+    QgsGeometry,
+    QgsMultiLineString,
     QgsWkbTypes,
     QgsProcessingParameterVectorDestination,
     QgsVectorLayer,
     QgsProcessingParameterFile,
 )
+from PyQt5.QtCore import QVariant
+
 
 from ..ops import get_fields, generate_od_routes
 from ..utils import make_single, make_centroids
@@ -315,6 +323,95 @@ class NvdbAlgorithm(QgsProcessingAlgorithm):
         # dictionary returned by the processAlgorithm function.
         network_source = self.parameterAsVectorLayer(parameters, self.NETWORK, context)
 
+        rlid_field = None
+        from_field = None
+        to_field = None
+        class_field = None
+        oper_field = None
+        speedf_field = None
+        speedb_field = None
+        adt_field = None
+        type_field = None
+
+        for field in network_source.fields():
+            name = field.name()
+            lname = name.lower()
+
+            if lname == 'route_id':
+                rlid_field = name
+            elif lname == 'from_measure':
+                from_field = name
+            elif lname == 'to_measure':
+                to_field = name
+            elif lname == 'klass_181':
+                class_field = name
+            elif lname == 'vagha_6':
+                oper_field = name
+            elif lname == 'f_hogst_225':
+                speedf_field = name
+            elif lname == 'b_hogst_225':
+                speedb_field = name
+            elif lname == 'adt_f_117':
+                adt_field = name
+            elif lname == 'vagtr_474':
+                type_field = name
+
+        expr = f'"{type_field}" = 2'
+        if not network_source.setSubsetString(expr):
+            raise Exception('Failed to set subset')
+
+        result = processing.run(
+            'native:buffer',
+            {
+                'INPUT': network_source,
+                #'DISSOLVE': True,
+                'DISTANCE': 100,
+                'END_CAP_STYLE': 2,
+                'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT,
+            },
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
+        )['OUTPUT']
+
+        buffer_layer = context.takeResultLayer(result)
+
+        print(len(buffer_layer))
+        bike_buffer = buffer_layer.getGeometry(1)
+        print(bike_buffer)
+
+        index = QgsSpatialIndex(buffer_layer.getFeatures(), feedback=feedback)
+        geoms = {f.id(): f.geometry() for f in buffer_layer.getFeatures()}
+
+        ids = index.intersects(bike_buffer.boundingBox())
+        print(ids)
+        for i in ids:
+            if bike_buffer.intersects(geometry=geoms[i]):
+                print('BOOOOM!')
+
+        fields = QgsFields()
+        fields.append(QgsField('rlid', QVariant.String))
+        fields.append(QgsField('from_measure', QVariant.Double))
+        fields.append(QgsField('to_measure', QVariant.Double))
+        fields.append(QgsField('oper', QVariant.Int))
+        fields.append(QgsField('class', QVariant.Int))
+        fields.append(QgsField('speed', QVariant.Int))
+        fields.append(QgsField('adt', QVariant.Int))
+
+        fields.append(QgsField('rec', QVariant.Int))
+        fields.append(QgsField('lts', QVariant.Int))
+        fields.append(QgsField('ratio', QVariant.Double))
+        ratios = {1: 0, 2: 1, 3: 1.58, 4: 2}
+
+        fields.append(QgsField('gc', QVariant.Bool))
+
+        expr = (
+            f'"{type_field}" = 1 AND "{oper_field}" IN (1, 2) AND "{class_field}" <= 5'
+        )
+        print(expr)
+        if not network_source.setSubsetString(expr):
+            raise Exception('Failed to set subset')
+
         network_layer = make_single(
             network_source,
             context=context,
@@ -322,14 +419,115 @@ class NvdbAlgorithm(QgsProcessingAlgorithm):
             is_child_algorithm=True,
         )
 
+        if not network_source.setSubsetString(''):
+            raise Exception('Failed to set subset')
+
         (sink, sink_id) = self.parameterAsSink(
             parameters,
             name=self.OUTPUT,
             context=context,
-            fields=None,
+            fields=fields,
             geometryType=network_layer.wkbType(),
             crs=network_layer.sourceCrs(),
         )
+
+        n = len(network_layer)
+        chunk = n // 100
+        print(n, chunk)
+        for i, feat in enumerate(network_layer.getFeatures()):
+            """if not feat[type_field] == 1:
+                continue
+            if not feat[oper_field] in [1, 2]:
+                continue
+            if feat[class_field] > 5:
+                continue"""
+
+            geom = feat.geometry()
+
+            _feat = QgsFeature(fields)
+            _feat.setGeometry(geom)
+            _feat['rlid'] = feat[rlid_field]
+            _feat['from_measure'] = feat[from_field]
+            _feat['to_measure'] = feat[to_field]
+
+            _feat['speed'] = speed = max(feat[speedf_field], feat[speedb_field])
+            _feat['adt'] = adt = feat[adt_field]
+            _feat['class'] = clss = feat[class_field]
+            _feat['oper'] = oper = feat[oper_field]
+
+            # Find existing bike infra
+            gc = False
+            for fid in index.intersects(geom.boundingBox()):
+                if geom.intersects(geometry=geoms[fid]):
+                    gc = True
+                    break
+
+            _feat['gc'] = gc
+
+            if not adt:
+                if clss <= 3:
+                    adt = 9001
+                elif clss == 4:
+                    adt = 3000
+                else:
+                    adt = 900
+
+            if not speed:
+                speed = 70
+
+            # VGU classify required infra
+            rec = None
+            if clss <= 2:
+                rec = 5
+            elif speed <= 30:
+                rec = 1
+            elif speed <= 60 and adt <= 2000:
+                rec = 2
+            elif speed <= 80 and adt <= 4000 or speed <= 40 and adt > 4000:
+                rec = 3
+            elif speed > 80 or adt > 4000:
+                rec = 4
+
+            # Debug missing
+            if not adt:
+                rec = -1
+            if not speed:
+                rec = -2
+
+            _feat['rec'] = rec
+
+            # LTS
+            lts = None
+            if clss <= 2 or speed > 80 or (adt > 4000 and speed > 40 and not gc):
+                lts = 4
+            elif speed <= 30 or (adt <= 1000 and speed <= 40):
+                lts = 1
+            elif gc and (
+                adt <= 1000
+                or (speed <= 60 and adt <= 2000)
+                or (speed <= 40 and adt <= 4000)
+            ):
+                lts = 1
+            elif gc and speed > 60 and adt > 4000:
+                lts = 3
+            elif not gc and (
+                adt > 4000
+                or (speed > 40 and adt >= 2000)
+                or (speed > 60 and adt >= 1000)
+            ):
+                lts = 3
+            else:
+                lts = 2
+
+            _feat['lts'] = lts
+            _feat['ratio'] = ratios[lts]
+
+            # Done
+            sink.addFeature(_feat)
+
+            if feedback and i % chunk == 0:
+                p = 100 * i / n
+                feedback.setProgress(p)
 
         return {self.OUTPUT: sink_id}
 

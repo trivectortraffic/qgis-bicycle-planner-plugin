@@ -95,4 +95,5 @@ class Plugin:
 
     def renderTest(self, painter):
         # use painter for drawing to map canvas
-        print("TestPlugin: renderTest called!")
+        # print("TestPlugin: renderTest called!")
+        pass
