@@ -73,6 +73,9 @@ def generate_od_routes(
     class_field: str,
     work_layer: QgsVectorLayer = None,
     work_size_field: str = None,
+    school_layer: QgsVectorLayer = None,
+    school_size_field: str = None,
+    origin_weight_field: str = None,
     socio_data=None,
     health_data=None,
     diversity_data=None,
@@ -122,7 +125,8 @@ def generate_od_routes(
     orig_n = len(origin_layer)
     poi_n = len(poi_layer)
     work_n = len(work_layer) if work_layer else 0
-    dest_n = poi_n + work_n
+    school_n = len(school_layer) if school_layer else 0
+    dest_n = poi_n + work_n + school_n
 
     orig_points = [None] * orig_n
     orig_sizes = np.zeros(orig_n, dtype=float)
@@ -138,7 +142,9 @@ def generate_od_routes(
     orig_id_field = 'deso'
     for i, feat in enumerate(origin_layer.getFeatures()):
         orig_points[i] = feat.geometry().asPoint()
-        orig_sizes[i] = feat[size_field]
+        orig_sizes[i] = (
+            feat[size_field] * feat[origin_weight_field] if origin_weight_field else 1
+        )
 
         if socio_data:
             orig_socio[i] = socio_data[
@@ -164,6 +170,13 @@ def generate_od_routes(
             dest_fids[i] = feat.id()
             dest_sizes[i] = feat[work_size_field]  # TODO: dest size
             dest_cats[i] = 'work'
+
+    if school_layer:
+        for i, feat in enumerate(school_layer.getFeatures(), start=(poi_n + work_n)):
+            dest_points[i] = feat.geometry().asPoint()
+            dest_fids[i] = feat.id()
+            dest_sizes[i] = feat[school_size_field]  # TODO: dest size
+            dest_cats[i] = 'school'
 
     # points = [origin.point for origin in origins_data] + [
     #    dest.point for dest in dests_data

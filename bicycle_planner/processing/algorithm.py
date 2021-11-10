@@ -47,11 +47,15 @@ class FlowAlgorithm(QgsProcessingAlgorithm):
     ORIGINS = 'ORIGINS'
     DESTS = 'DESTINATIONS'
     WORK = 'WORK'
+    SCHOOL = 'SCHOOL'
 
     SOCIO_FILE = 'SOCIO_FILE'
 
     POP_FIELD = 'POPULATION_FIELD'
+    ORIGIN_W_FIELD = 'ORIGIN_W_FIELD'  # Weighting param
+    SCHOOL_N_FIELD = 'SCHOOL_N_FIELD'
     WORK_FIELD = 'WORK_FIELD'
+    SCHOOL_N_FIELD = 'SCHOOL_N_FIELD'
     CLASS_FIELD = 'CLASS_FIELD'
 
     OUTPUT = 'OUTPUT'
@@ -84,6 +88,17 @@ class FlowAlgorithm(QgsProcessingAlgorithm):
                 defaultValue='totalt',
                 parentLayerParameterName=self.ORIGINS,
                 optional=False,
+                type=QgsProcessingParameterField.Numeric,
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.ORIGIN_W_FIELD,
+                self.tr('Origin weight field'),
+                defaultValue='a',
+                parentLayerParameterName=self.ORIGINS,
+                optional=True,
                 type=QgsProcessingParameterField.Numeric,
             )
         )
@@ -127,6 +142,25 @@ class FlowAlgorithm(QgsProcessingAlgorithm):
         )
 
         self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.SCHOOL,
+                self.tr('School layer'),
+                [QgsProcessing.TypeVectorAnyGeometry],
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterField(
+                self.SCHOOL_N_FIELD,
+                self.tr('Size of school field'),
+                defaultValue='antal',
+                parentLayerParameterName=self.SCHOOL,
+                optional=False,
+                type=QgsProcessingParameterField.Numeric,
+            )
+        )
+
+        self.addParameter(
             QgsProcessingParameterFile(
                 self.SOCIO_FILE,
                 self.tr('Socio-economic data'),
@@ -155,10 +189,17 @@ class FlowAlgorithm(QgsProcessingAlgorithm):
         origins_source = self.parameterAsVectorLayer(parameters, self.ORIGINS, context)
         dests_source = self.parameterAsVectorLayer(parameters, self.DESTS, context)
         work_source = self.parameterAsVectorLayer(parameters, self.WORK, context)
+        school_source = self.parameterAsVectorLayer(parameters, self.SCHOOL, context)
 
         pop_field = self.parameterAsString(parameters, self.POP_FIELD, context)
+        origin_w_field = self.parameterAsString(
+            parameters, self.ORIGIN_W_FIELD, context
+        )
         class_field = self.parameterAsString(parameters, self.CLASS_FIELD, context)
         work_field = self.parameterAsString(parameters, self.WORK_FIELD, context)
+        school_n_field = self.parameterAsString(
+            parameters, self.SCHOOL_N_FIELD, context
+        )
 
         network_layer = make_single(
             network_source,
@@ -191,6 +232,13 @@ class FlowAlgorithm(QgsProcessingAlgorithm):
             is_child_algorithm=True,
         )
 
+        school_layer = make_single(
+            school_source,
+            context=context,
+            feedback=feedback,
+            is_child_algorithm=True,
+        )
+
         dests_layer = make_single(
             dests_source,
             context=context,
@@ -201,9 +249,12 @@ class FlowAlgorithm(QgsProcessingAlgorithm):
         features = generate_od_routes(
             network_layer=network_layer,
             origin_layer=origins_layer,
+            origin_weight_field=origin_w_field,
             poi_layer=dests_layer,
             work_layer=work_layer,
             work_size_field=work_field,
+            school_layer=school_layer,
+            school_size_field=school_n_field,
             size_field=pop_field,
             class_field=class_field,
             return_layer=False,
