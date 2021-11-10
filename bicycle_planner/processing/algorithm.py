@@ -398,7 +398,7 @@ class NvdbAlgorithm(QgsProcessingAlgorithm):
         fields.append(QgsField('speed', QVariant.Int))
         fields.append(QgsField('adt', QVariant.Int))
 
-        fields.append(QgsField('rec', QVariant.Int))
+        fields.append(QgsField('vgu', QVariant.Int))
         fields.append(QgsField('lts', QVariant.Int))
         fields.append(QgsField('ratio', QVariant.Double))
         ratios = {1: 0, 2: 1, 3: 1.58, 4: 2}
@@ -476,25 +476,25 @@ class NvdbAlgorithm(QgsProcessingAlgorithm):
                 speed = 70
 
             # VGU classify required infra
-            rec = None
+            vgu = None
             if clss <= 2:
-                rec = 5
+                vgu = 5
             elif speed <= 30:
-                rec = 1
+                vgu = 1
             elif speed <= 60 and adt <= 2000:
-                rec = 2
+                vgu = 2
             elif speed <= 80 and adt <= 4000 or speed <= 40 and adt > 4000:
-                rec = 3
+                vgu = 3
             elif speed > 80 or adt > 4000:
-                rec = 4
+                vgu = 4
 
             # Debug missing
             if not adt:
-                rec = -1
+                vgu = -1
             if not speed:
-                rec = -2
+                vgu = -2
 
-            _feat['rec'] = rec
+            _feat['vgu'] = vgu
 
             # LTS
             lts = None
