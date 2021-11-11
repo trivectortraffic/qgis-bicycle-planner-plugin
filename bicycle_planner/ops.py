@@ -143,8 +143,8 @@ def generate_od_routes(
     orig_id_field = 'deso'
     for i, feat in enumerate(origin_layer.getFeatures()):
         orig_points[i] = feat.geometry().asPoint()
-        orig_sizes[i] = (
-            feat[size_field] * feat[origin_weight_field] if origin_weight_field else 1
+        orig_sizes[i] = feat[size_field] * (
+            feat[origin_weight_field] if origin_weight_field else 1
         )
 
         if socio_data:
