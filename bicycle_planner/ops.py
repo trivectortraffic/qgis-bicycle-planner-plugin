@@ -120,6 +120,7 @@ def generate_od_routes(
 
     poi_sidx = QgsSpatialIndex(poi_layer)
     work_sidx = QgsSpatialIndex(work_layer)
+    school_sidx = QgsSpatialIndex(school_layer)
 
     ## prepare points
     orig_n = len(origin_layer)
@@ -201,28 +202,44 @@ def generate_od_routes(
     dest_tied_points = tied_points[orig_n:]
 
     poi_tied_points = dest_tied_points[:poi_n]
-    work_tied_points = dest_tied_points[poi_n:]
+    work_tied_points = dest_tied_points[poi_n : poi_n + work_n]
+    school_tied_points = dest_tied_points[poi_n + work_n :]
 
     dest_fid_to_tied_points = dict(zip(dest_fids, enumerate(dest_tied_points)))
 
     poi_fid_to_tied_points = dict(zip(dest_fids[:poi_n], enumerate(poi_tied_points)))
     work_fid_to_tied_points = dict(
-        zip(dest_fids[poi_n:], enumerate(work_tied_points, start=poi_n))
+        zip(dest_fids[poi_n : poi_n + work_n], enumerate(work_tied_points, start=poi_n))
+    )
+    school_fid_to_tied_points = dict(
+        zip(
+            dest_fids[poi_n + work_n :],
+            enumerate(school_tied_points, start=poi_n + work_n),
+        )
     )
 
     orig_dests = [None] * orig_n
     for i, point in enumerate(orig_points):
-        orig_dests[i] = [
-            poi_fid_to_tied_points[fid]
-            for fid in poi_sidx.nearestNeighbor(
-                point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
-            )
-        ] + [
-            work_fid_to_tied_points[fid]
-            for fid in work_sidx.nearestNeighbor(
-                point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
-            )
-        ]
+        orig_dests[i] = (
+            [
+                poi_fid_to_tied_points[fid]
+                for fid in poi_sidx.nearestNeighbor(
+                    point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
+                )
+            ]
+            + [
+                work_fid_to_tied_points[fid]
+                for fid in work_sidx.nearestNeighbor(
+                    point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
+                )
+            ]
+            + [
+                school_fid_to_tied_points[fid]
+                for fid in school_sidx.nearestNeighbor(
+                    point, neighbors=MAX_NEIGHBORS, maxDistance=max_distance
+                )
+            ]
+        )
 
     step = 100.0 / orig_n
     time_dijkstra = 0.0
