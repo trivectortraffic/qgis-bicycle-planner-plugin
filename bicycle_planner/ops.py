@@ -369,6 +369,9 @@ def generate_od_routes(
                     flow += flow_ebke
 
             segment['flow'] = flow
+            segment['lts'] = feature['lts']
+            segment['vgu'] = feature['vgu']
+            segment['R'] = flow * feature['ratio']
             segments.append(segment)
 
     if not return_layer:
@@ -392,6 +395,10 @@ def get_fields():
     fields = QgsFields()
     fields.append(QgsField('network_fid', QVariant.Int))
     fields.append(QgsField('flow', QVariant.Int))
+    fields.append(QgsField('lts', QVariant.Int))
+    fields.append(QgsField('vgu', QVariant.Int))
+    fields.append(QgsField('R', QVariant.Int))
+
     for cat in poi_categories:
         bike_field = f'{cat}_bike_value'
         ebike_field = f'{cat}_ebike_value'
