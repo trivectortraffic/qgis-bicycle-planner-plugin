@@ -1,5 +1,7 @@
 # Bicycle Planner QGIS Plugin
 
+![Bicycle flow per day](docs/flow_total.png)
+
 ## Requirements
 
 QGIS 3.20+
@@ -31,3 +33,7 @@ The _Destination layer_ should be a collection of OSM POI point geometries, that
 _Work place layer_ and _School layer_ are geometries with a size attribute.
 
 When all layers an attributes are set a flow network can be calculated by running the algorithm.
+
+## Calculate socio index and prepare origins
+
+A Python script is provided in the `scripts/` directory that can be used to calculate socio-economic parameters and add them to origin geometries as attributes. The script developed to use Swedish DeSO areas and statistics from SCB for tah calculations.
