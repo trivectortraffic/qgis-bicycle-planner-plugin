@@ -1,6 +1,6 @@
 # Bicycle Planner QGIS Plugin
 
-![Bicycle flow per day](docs/flow_total.png)
+![Bicycle flow per day](docs/flow_totalt.png)
 
 ## Requirements
 
