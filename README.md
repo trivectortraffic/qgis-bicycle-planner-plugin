@@ -12,5 +12,5 @@ Copy the `bicycle_planner` directory to your QGIS plugin directory (e.g. `$HOME/
 
 The plugin can be found in the Processing Toolbox under _Bicycle Planner -> Vector Processing -> Generate bicycle flow network_
 
-![docs/dialog.png]
+![Plugin dialog](docs/dialog.png)
 
