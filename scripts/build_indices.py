@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     edu_frac = (edu[['gy', 'ho', 'uni']]).sum(axis=1) / edu.sum(axis=1)
     edu_frac.name = 'edu_frac'
-    s_edu = points(edu_frac)
+    # s_edu = points(edu_frac)
 
     # econ
     econ = pd.read_excel(
@@ -130,7 +130,7 @@ if __name__ == '__main__':
 
     econ_frac = 1 - econ['frac']
     econ_frac.name = 'econ_frac'
-    s_econ = points(econ_frac)
+    # s_econ = points(econ_frac)
 
     #
     # Other
