@@ -31,6 +31,9 @@ def make_geom(deso_path, deso_layer, deso_id, index_path):
 
 
 def points(foo):
+    """
+    Calculate points for a series
+    """
     low = foo.quantile(0.2)
     high = foo.quantile(0.8)
 
