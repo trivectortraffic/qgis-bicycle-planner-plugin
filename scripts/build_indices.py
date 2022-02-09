@@ -7,6 +7,7 @@ import geopandas as gpd
 
 from devtools import debug
 
+INDICES = ['work', 'edu', 'econ', 'health', 'div']
 DESO_PATTERN = r'^[0-9]{4}[A-C][0-9]{4}$'
 
 
@@ -48,39 +49,46 @@ def points(foo):
     return p
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(os.path.basename(__file__))
-    parser.add_argument('--deso-file')
-    parser.add_argument('--deso-layer', default='deso_2018_v2')
-    parser.add_argument('--deso-id', default='deso')
-    parser.add_argument('--deso-pop', default='befolkning_191231')
+def read_xlsx(filename, columns, skip_rows):
+    df = pd.read_excel(
+        filename,
+        header=None,
+        names=columns,
+        skiprows=skip_rows,
+    )
+    mask = df.deso.str.match(DESO_PATTERN, na=False)
+    return df[mask].set_index('deso')
 
-    parser.add_argument('--work-file')
-    parser.add_argument('--work-cols', default='deso,working,nonworking,total')
-    parser.add_argument('--work-skip-rows', default=5)
 
-    parser.add_argument('--edu-file')
-    parser.add_argument('--edu-cols', default='deso,gr,gy,ho,uni,na')
-    parser.add_argument('--edu-skip-rows', default=4)
+def convert(args):
+    print('convert')
 
-    parser.add_argument('--econ-file')
-    parser.add_argument('--econ-cols', default='deso,frac100,n,frac')
-    parser.add_argument('--econ-skip-rows', default=5)
+    items = [
+        {
+            'filename': getattr(args, f'{index}_file'),
+            'columns': getattr(args, f'{index}_cols', None),
+            'skip_rows': getattr(args, f'{index}_skip_rows'),
+        }
+        for index in INDICES
+        if getattr(args, f'{index}_file') is not None
+    ]
 
-    parser.add_argument('--health-file')
-    parser.add_argument('--health-cols', default='deso,days,n,oh')
-    parser.add_argument('--health-skip-rows', default=8)
+    if (n := len(items)) != 1:
+        print(f'Only one input file supported, found {n}')
+        return 1
 
-    parser.add_argument('--div-file')
-    parser.add_argument('--div-cols', default='deso,sv,foreign,total')
-    parser.add_argument('--div-skip-rows', default=5)
+    df = read_xlsx(**items[0])
+    print(df)
+    mode = 'a' if args.append else 'w'
+    df.to_csv(
+        args.output_file,
+        mode=mode,
+        header=not (os.path.exists(args.output_file) and args.append),
+    )
+    return 0
 
-    parser.add_argument('--index-file')
 
-    args = parser.parse_args()
-
-    print(args)
-
+def build(args):
     gdf = gpd.read_file(args.deso_file, layer=args.deso_layer).set_index('deso')
 
     #
@@ -193,3 +201,75 @@ if __name__ == '__main__':
     print(df)
 
     df.to_file('deso_index.fgb', driver='FlatGeobuf')
+
+    return 0
+
+
+def add_parser_inputs(parser, exclusive=False):
+    list_type = lambda s: s.lower().split(',')
+
+    required = False if exclusive else True
+    fparser = (
+        parser.add_mutually_exclusive_group(required=True) if exclusive else parser
+    )
+
+    fparser.add_argument('--work-file', required=required)
+    parser.add_argument(
+        '--work-cols', default='deso,working,nonworking,total', type=list_type
+    )
+    parser.add_argument('--work-skip-rows', default=5, type=int)
+
+    fparser.add_argument('--edu-file', required=required)
+    parser.add_argument('--edu-cols', default='deso,gr,gy,ho,uni,na', type=list_type)
+    parser.add_argument('--edu-skip-rows', default=4, type=int)
+
+    parser.add_argument('--econ-file', required=required)
+    parser.add_argument('--econ-cols', default='deso,frac100,n,frac', type=list_type)
+    parser.add_argument('--econ-skip-rows', default=5, type=int)
+
+    fparser.add_argument('--health-file', required=required)
+    parser.add_argument('--health-cols', default='deso,days,n,oh', type=list_type)
+    parser.add_argument('--health-skip-rows', default=8, type=int)
+
+    fparser.add_argument('--div-file', required=required)
+    parser.add_argument('--div-cols', default='deso,sv,foreign,total', type=list_type)
+    parser.add_argument('--div-skip-rows', default=5, type=int)
+
+
+def main():
+    """
+    work <=> Förvärvsarbete <=> work
+    edu <=> Utbildningsnivå
+    econ <=> Lågekonomisk
+    div <=> Utländskbakgrund
+    health <=> DeSOstatistik_Riket
+    """
+    parser = argparse.ArgumentParser(
+        os.path.basename(__file__),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    subparsers = parser.add_subparsers(required=True, dest='command')
+
+    convert_parser = subparsers.add_parser('convert')
+    convert_parser.set_defaults(func=convert)
+    convert_parser.add_argument('--output-file', required=True)
+    convert_parser.add_argument('--append', action='store_true')
+    add_parser_inputs(convert_parser, exclusive=True)
+
+    build_parser = subparsers.add_parser('build')
+    build_parser.set_defaults(func=build)
+    build_parser.add_argument('--deso-file')
+    build_parser.add_argument('--deso-layer', default='deso_2018_v2')
+    build_parser.add_argument('--deso-id', default='deso')
+    build_parser.add_argument('--deso-pop', default='befolkning_191231')
+    add_parser_inputs(build_parser)
+
+    args = parser.parse_args()
+    print(args)
+
+    return args.func(args)
+
+
+if __name__ == '__main__':
+    exit(main())
