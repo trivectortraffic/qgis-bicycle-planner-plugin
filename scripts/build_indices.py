@@ -223,7 +223,7 @@ def add_parser_inputs(parser, exclusive=False):
     parser.add_argument('--edu-cols', default='deso,gr,gy,ho,uni,na', type=list_type)
     parser.add_argument('--edu-skip-rows', default=4, type=int)
 
-    parser.add_argument('--econ-file', required=required)
+    fparser.add_argument('--econ-file', required=required)
     parser.add_argument('--econ-cols', default='deso,frac100,n,frac', type=list_type)
     parser.add_argument('--econ-skip-rows', default=5, type=int)
 
