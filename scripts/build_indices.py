@@ -5,8 +5,6 @@ import re
 import pandas as pd
 import geopandas as gpd
 
-from devtools import debug
-
 INDICES = ['work', 'edu', 'econ', 'health', 'div']
 DESO_PATTERN = r'^[0-9]{4}[A-C][0-9]{4}$'
 

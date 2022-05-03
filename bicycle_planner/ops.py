@@ -5,7 +5,7 @@ from time import time
 from typing import List
 
 import numpy as np
-from devtools import debug
+
 from qgis.analysis import (
     QgsNetworkDistanceStrategy,
     QgsVectorLayerDirector,
@@ -138,8 +138,6 @@ def generate_od_routes(
     dest_fids = [None] * dest_n
     dest_cats = [None] * dest_n
 
-    debug([field.name() for field in origin_layer.fields()])
-
     orig_id_field = 'deso'
     for i, feat in enumerate(origin_layer.getFeatures()):
         orig_points[i] = feat.geometry().asPoint()
@@ -153,11 +151,8 @@ def generate_od_routes(
             ]  # FIXME: check if all origins have data
 
     if socio_data:
-        debug(orig_socio)
         orig_socio = orig_socio / np.mean(orig_socio)
-        debug(orig_socio, orig_sizes)
         orig_sizes *= orig_socio
-        debug(orig_sizes)
 
     for i, feat in enumerate(poi_layer.getFeatures()):
         dest_points[i] = feat.geometry().asPoint()
