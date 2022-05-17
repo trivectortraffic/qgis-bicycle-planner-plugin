@@ -86,6 +86,14 @@ def convert(args):
     return 0
 
 
+def _read(filename, **kwargs):
+    if filename.endswith('.csv'):
+        return pd.read_csv(filename)
+    elif filename.endwith('.xlsx'):
+        return pd.read_excel(filename, **kwargs)
+    raise ValueError('Filename must be .csv or .xlsx')
+
+
 def build(args):
     gdf = gpd.read_file(args.deso_file, layer=args.deso_layer).set_index('deso')
 
@@ -94,10 +102,10 @@ def build(args):
     #
 
     # work
-    work = pd.read_excel(
+    work = _read(
         args.work_file,
         header=None,
-        names=args.work_cols.split(','),
+        names=args.work_cols,
         skiprows=args.work_skip_rows,
     )
     mask = work.deso.str.match(DESO_PATTERN, na=False)
@@ -112,10 +120,10 @@ def build(args):
     df = pd.DataFrame(index=work.index)
 
     # edu
-    edu = pd.read_excel(
+    edu = _read(
         args.edu_file,
         header=None,
-        names=args.edu_cols.split(','),
+        names=args.edu_cols,
         skiprows=args.edu_skip_rows,
     )
     mask = edu.deso.str.match(DESO_PATTERN, na=False)
@@ -127,10 +135,10 @@ def build(args):
     # s_edu = points(edu_frac)
 
     # econ
-    econ = pd.read_excel(
+    econ = _read(
         args.econ_file,
         header=None,
-        names=args.econ_cols.split(','),
+        names=args.econ_cols,
         skiprows=args.econ_skip_rows,
     )
     mask = econ.deso.str.match(DESO_PATTERN, na=False)
@@ -146,10 +154,10 @@ def build(args):
     #
 
     # health
-    health = pd.read_excel(
+    health = _read(
         args.health_file,
         header=None,
-        names=args.health_cols.split(','),
+        names=args.health_cols,
         skiprows=args.health_skip_rows,
     )
     mask = health.deso.str.match(DESO_PATTERN, na=False)
@@ -161,10 +169,10 @@ def build(args):
 
     # diversity
     print('diversity')
-    div = pd.read_excel(
+    div = _read(
         args.div_file,
         header=None,
-        names=args.div_cols.split(','),
+        names=args.div_cols,
         skiprows=args.div_skip_rows,
     )
     print(len(div))
