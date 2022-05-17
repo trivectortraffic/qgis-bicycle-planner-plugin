@@ -186,10 +186,9 @@ def build(args):
     #
     # Agg
     #
-    df = pd.concat(
-        [gdf, work_frac, edu_frac, econ_frac, health_val, div_frac],
-        join='inner',
-        axis=1,
+    df = gdf.join(
+        [work_frac, edu_frac, econ_frac, health_val, div_frac],
+        how='left',
     )
     print(df)
 
