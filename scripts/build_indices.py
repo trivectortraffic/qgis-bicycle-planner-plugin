@@ -278,7 +278,7 @@ def main():
     build_parser = subparsers.add_parser('build')
     build_parser.set_defaults(func=build)
     build_parser.add_argument('--deso-file')
-    build_parser.add_argument('--deso-layer', default='deso_2018_v2')
+    build_parser.add_argument('--deso-layer', default=None)
     build_parser.add_argument('--deso-id', default='deso')
     build_parser.add_argument('--deso-pop', default='befolkning_191231')
     build_parser.add_argument('-o', '--output-file', required=True, type=str)
