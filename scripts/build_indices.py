@@ -210,8 +210,21 @@ def build(args):
     return 0
 
 
-def add_parser_inputs(parser, exclusive=False):
-    list_type = lambda s: s.lower().split(',')
+def add_parser_inputs(parser, exclusive=False, from_scb_excel=False):
+    work_skip_rows = 0
+    edu_skip_rows = 0
+    econ_skip_rows = 0
+    health_skip_rows = 0
+    div_skip_rows = 0
+    if from_scb_excel:
+        work_skip_rows = 5
+        edu_skip_rows = 4
+        econ_skip_rows = 5
+        health_skip_rows = 8
+        div_skip_rows = 5
+
+    def list_type(s):
+        return s.lower().split(',')
 
     required = False if exclusive else True
     fparser = (
@@ -222,23 +235,23 @@ def add_parser_inputs(parser, exclusive=False):
     parser.add_argument(
         '--work-cols', default='deso,working,nonworking,total', type=list_type
     )
-    parser.add_argument('--work-skip-rows', default=5, type=int)
+    parser.add_argument('--work-skip-rows', default=work_skip_rows, type=int)
 
     fparser.add_argument('--edu-file', required=required)
     parser.add_argument('--edu-cols', default='deso,gr,gy,ho,uni,na', type=list_type)
-    parser.add_argument('--edu-skip-rows', default=4, type=int)
+    parser.add_argument('--edu-skip-rows', default=edu_skip_rows, type=int)
 
     fparser.add_argument('--econ-file', required=required)
     parser.add_argument('--econ-cols', default='deso,frac100,n,frac', type=list_type)
-    parser.add_argument('--econ-skip-rows', default=5, type=int)
+    parser.add_argument('--econ-skip-rows', default=econ_skip_rows, type=int)
 
     fparser.add_argument('--health-file', required=required)
     parser.add_argument('--health-cols', default='deso,days,n,oh', type=list_type)
-    parser.add_argument('--health-skip-rows', default=8, type=int)
+    parser.add_argument('--health-skip-rows', default=health_skip_rows, type=int)
 
     fparser.add_argument('--div-file', required=required)
     parser.add_argument('--div-cols', default='deso,sv,foreign,total', type=list_type)
-    parser.add_argument('--div-skip-rows', default=5, type=int)
+    parser.add_argument('--div-skip-rows', default=div_skip_rows, type=int)
 
 
 def main():
@@ -260,7 +273,7 @@ def main():
     convert_parser.set_defaults(func=convert)
     convert_parser.add_argument('--output-file', required=True)
     convert_parser.add_argument('--append', action='store_true')
-    add_parser_inputs(convert_parser, exclusive=True)
+    add_parser_inputs(convert_parser, exclusive=True, from_scb_excel=True)
 
     build_parser = subparsers.add_parser('build')
     build_parser.set_defaults(func=build)
