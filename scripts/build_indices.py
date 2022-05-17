@@ -205,7 +205,7 @@ def build(args):
 
     print(df)
 
-    df.to_file('deso_index.fgb', driver='FlatGeobuf')
+    df.to_file(args.output_file, driver='FlatGeobuf')
 
     return 0
 
@@ -268,6 +268,7 @@ def main():
     build_parser.add_argument('--deso-layer', default='deso_2018_v2')
     build_parser.add_argument('--deso-id', default='deso')
     build_parser.add_argument('--deso-pop', default='befolkning_191231')
+    build_parser.add_argument('-o', '--output-file', required=True, type=str)
     add_parser_inputs(build_parser)
 
     args = parser.parse_args()
