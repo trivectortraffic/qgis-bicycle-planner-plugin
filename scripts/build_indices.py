@@ -192,20 +192,48 @@ def build(args):
     )
     print(df)
 
-    df['s_work'] = points(df['work_frac'])
-    df['s_edu'] = points(df['edu_frac'])
-    df['s_econ'] = points(df['econ_frac'])
+    def finalize(df):
+        df['s_work'] = points(df['work_frac'])
+        df['s_edu'] = points(df['edu_frac'])
+        df['s_econ'] = points(df['econ_frac'])
 
-    s_cols = ['s_work', 's_edu', 's_econ']
+        s_cols = ['s_work', 's_edu', 's_econ']
 
-    df['s'] = df[s_cols].sum(axis=1) / df[s_cols].sum(axis=1).mean()
-    df['h'] = df['health_val'] / df['health_val'].mean()
-    df['d'] = df['div_frac'] / df['div_frac'].mean()
-    df['a'] = df[['s', 'h', 'd']].mean(axis=1)
+        df['s'] = df[s_cols].sum(axis=1) / df[s_cols].sum(axis=1).mean()
+        df['h'] = df['health_val'] / df['health_val'].mean()
+        df['d'] = df['div_frac'] / df['div_frac'].mean()
+        df['a'] = df[['s', 'h', 'd']].mean(axis=1)
 
-    print(df)
+        print(df)
 
-    df.to_file(args.output_file, driver='FlatGeobuf')
+        return df
+
+    output_file = f'{args.output_prefix}.gpkg'
+    if args.intersect_file:
+        igdf = gpd.read_file(args.intersect_file)
+        for feat in igdf.itertuples():
+            name = getattr(feat, args.intersect_id)
+            print(feat)
+            buffer = (
+                feat.geometry.buffer(args.intersect_buffer_m)
+                if args.intersect_buffer_m > 0
+                else feat.geometry
+            )
+            mask = df.geometry.intersects(buffer)
+            _df = finalize(df[mask].copy())
+            _df.to_file(output_file, layer=f'{name}_indices', driver='GPKG')
+            gpd.GeoDataFrame(
+                [{'name': name}], geometry=[feat.geometry], crs=igdf.crs
+            ).to_file(output_file, layer=f'{name}_intersect', driver='GPKG')
+            gpd.GeoDataFrame(
+                [{'name': name, 'buffer_m': args.intersect_buffer_m}],
+                geometry=[buffer],
+                crs=igdf.crs,
+            ).to_file(output_file, layer=f'{name}_intersect_buffer', driver='GPKG')
+
+    else:
+        df = finalize(df)
+        df.to_file(output_file, layer='indices', driver='GPKG')
 
     return 0
 
@@ -281,7 +309,11 @@ def main():
     build_parser.add_argument('--deso-layer', default=None)
     build_parser.add_argument('--deso-id', default='deso')
     build_parser.add_argument('--deso-pop', default='befolkning_191231')
-    build_parser.add_argument('-o', '--output-file', required=True, type=str)
+    build_parser.add_argument('--intersect-file')
+    build_parser.add_argument('--intersect-layer')
+    build_parser.add_argument('--intersect-buffer-m', default=0, type=int)
+    build_parser.add_argument('--intersect-id', default='Region_TRV')
+    build_parser.add_argument('-o', '--output-prefix', required=True, type=str)
     add_parser_inputs(build_parser)
 
     args = parser.parse_args()
